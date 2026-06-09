@@ -136,8 +136,7 @@ def get_state(chat_id: int) -> Dict[str, object]:
 
 def build_ydl_opts(*, download: bool = False) -> dict:
     opts = {
-        "format": "bestaudio[abr<=128]/bestaudio/best",
-        "keepvideo": False,
+        "format": "bestaudio/best",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
@@ -380,6 +379,7 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = get_state(update.effective_chat.id)
     await update.message.reply_text(
         "🎵 *Advanced Music Bot*\n"
         "━━━━━━━━━━━━━━━\n"
@@ -390,7 +390,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "⏭ `/skip` • Jump to the next song\n"
         "🎼 `/now` • See the current track\n"
         "⏹ `/stop` • Clear queue & disconnect",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=get_player_keyboard(is_paused=state.get("paused", False))
     )
 
 
@@ -486,6 +487,7 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = get_state(update.effective_chat.id)
     await update.message.reply_text(
         "🎵 *Advanced Music Bot*\n"
         "━━━━━━━━━━━━━━━\n"
@@ -495,7 +497,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "⏭ `/skip` • Jump to the next song\n"
         "🎼 `/now` • See the current track\n"
         "⏹ `/stop` • Clear queue & disconnect",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=get_player_keyboard(is_paused=state.get("paused", False))
     )
 
 
