@@ -166,24 +166,25 @@ async def search_song(query: str) -> Song:
 
 
 async def get_stream_url(song: Song) -> Song:
-    ydl_opts = build_ydl_opts(download=False)
+    # We must download the file locally. PyTgCalls/FFmpeg cannot reliably stream YouTube 
+    # URLs directly even with HTTP headers due to TLS fingerprinting and IP throttling.
+    file_id = "".join(x for x in song.title if x.isalnum())[:20]
+    out_file = os.path.join(tempfile.gettempdir(), f"{file_id}.%(ext)s")
+
+    ydl_opts = build_ydl_opts(download=True)
     ydl_opts.update({
         "extract_flat": False,
+        "outtmpl": out_file,
     })
 
     loop = asyncio.get_running_loop()
 
-    def _extract() -> dict:
+    def _extract() -> str:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(song.url, download=False)
+            info = ydl.extract_info(song.url, download=True)
+            return ydl.prepare_filename(info)
 
-    info = await loop.run_in_executor(None, _extract)
-    
-    if not info.get("url"):
-        raise ValueError("Could not extract a valid stream URL.")
-        
-    song.file_path = info["url"]
-    song.headers = info.get("http_headers")
+    song.file_path = await loop.run_in_executor(None, _extract)
     return song
 
 
@@ -233,8 +234,7 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
             chat_id,
             MediaStream(
                 song.file_path, 
-                video_flags=MediaStream.Flags.IGNORE,
-                headers=song.headers
+                video_flags=MediaStream.Flags.IGNORE
             ),
         )
         return True
@@ -257,7 +257,9 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
     state["playing"] = True
 
     try:
+        status_msg = await update.effective_message.reply_text(f"📥 Downloading audio for {current.title} (this takes a few seconds)...")
         stream_data = await get_stream_url(current)
+        await status_msg.delete()
 
         if await _play_in_group(chat_id, stream_data):
             await update.effective_message.reply_text(
