@@ -309,7 +309,12 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
 
         if await _play_in_group(chat_id, stream_data):
             await update.effective_message.reply_text(
-                f"🎧 Streaming in voice chat: {stream_data.title}"
+                f"🎧 *Now Playing*\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🎵 *Track:* {stream_data.title}\n"
+                f"👤 *Artist:* {stream_data.uploader}\n"
+                f"⏱ *Duration:* {stream_data.duration // 60}m {stream_data.duration % 60}s",
+                parse_mode="Markdown"
             )
             
             # Delete the previous song's file to save disk space on Render
@@ -336,12 +341,16 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "🎵 Advanced Music Bot is ready.\n"
-        "Use /play <song name> to add a track.\n"
-        "Use /queue to view the queue.\n"
-        "Use /skip to jump to the next song.\n"
-        "Use /now to see what is playing.\n"
-        "Use /stop to clear the queue."
+        "🎵 *Advanced Music Bot*\n"
+        "━━━━━━━━━━━━━━━\n"
+        "Welcome! I am ready to play your favorite tracks directly in the Voice Chat. 🎧\n\n"
+        "*Commands:*\n"
+        "🔍 `/play <song>` • Search & add to queue\n"
+        "📜 `/queue` • View the upcoming tracks\n"
+        "⏭ `/skip` • Jump to the next song\n"
+        "🎼 `/now` • See the current track\n"
+        "⏹ `/stop` • Clear queue & disconnect",
+        parse_mode="Markdown"
     )
 
 
@@ -356,9 +365,12 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         state = get_state(update.effective_chat.id)
         state["queue"].append(song)
         await update.message.reply_text(
-            f"✅ Added to queue: {song.title}\n"
-            f"Artist: {song.uploader}\n"
-            f"Duration: {song.duration}s"
+            f"✅ *Added to Queue*\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🎵 *Track:* {song.title}\n"
+            f"👤 *Artist:* {song.uploader}\n"
+            f"⏱ *Duration:* {song.duration // 60}m {song.duration % 60}s",
+            parse_mode="Markdown"
         )
 
         if not state["playing"]:
@@ -377,20 +389,22 @@ async def queue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = get_state(update.effective_chat.id)
     current = state.get("current")
     songs = state.get("queue", [])
-    lines = ["🎶 Current queue:"]
+    
+    lines = ["📜 *Current Queue*\n━━━━━━━━━━━━━━━"]
 
     if current:
-        lines.append(f"Now playing: {current.title}")
+        lines.append(f"🔊 *Playing Now:*\n{current.title}\n")
     else:
-        lines.append("Now playing: nothing")
+        lines.append("🔊 *Playing Now:*\n_Nothing_\n")
 
     if songs:
+        lines.append("⏳ *Up Next:*")
         for index, song in enumerate(songs, start=1):
-            lines.append(f"{index}. {song.title} — {song.uploader}")
+            lines.append(f"{index}️⃣ {song.title} — {song.uploader}")
     else:
-        lines.append("No songs queued.")
+        lines.append("📭 _No songs in queue._")
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
 async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -408,10 +422,15 @@ async def now_playing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     current = state.get("current")
     if current:
         await update.message.reply_text(
-            f"🎵 Now playing: {current.title}\nArtist: {current.uploader}\nDuration: {current.duration}s"
+            f"🎧 *Now Playing*\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🎵 *Track:* {current.title}\n"
+            f"👤 *Artist:* {current.uploader}\n"
+            f"⏱ *Duration:* {current.duration // 60}m {current.duration % 60}s",
+            parse_mode="Markdown"
         )
     else:
-        await update.message.reply_text("Nothing is playing right now.")
+        await update.message.reply_text("🔇 _Nothing is playing right now._", parse_mode="Markdown")
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -424,12 +443,15 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "Available commands:\n"
-        "/play <song> - search and queue a song\n"
-        "/queue - show the current queue\n"
-        "/skip - play the next song\n"
-        "/now - show current song\n"
-        "/stop - clear the queue"
+        "🎵 *Advanced Music Bot*\n"
+        "━━━━━━━━━━━━━━━\n"
+        "*Commands:*\n"
+        "🔍 `/play <song>` • Search & add to queue\n"
+        "📜 `/queue` • View the upcoming tracks\n"
+        "⏭ `/skip` • Jump to the next song\n"
+        "🎼 `/now` • See the current track\n"
+        "⏹ `/stop` • Clear queue & disconnect",
+        parse_mode="Markdown"
     )
 
 
