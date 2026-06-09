@@ -261,6 +261,18 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
         stream_data = await get_stream_url(current)
         await status_msg.delete()
 
+        import shutil
+        ffmpeg_path = shutil.which("ffmpeg")
+        file_size = 0
+        if os.path.exists(stream_data.file_path):
+            file_size = os.path.getsize(stream_data.file_path)
+
+        diag_msg = f"🔍 Diagnostics:\n- FFmpeg path: {ffmpeg_path}\n- File size: {file_size / 1024 / 1024:.2f} MB"
+        await update.effective_message.reply_text(diag_msg)
+
+        if file_size < 1000:
+            raise RuntimeError("The downloaded audio file is extremely small (likely 0 bytes or an error page). YouTube blocked the download.")
+
         if await _play_in_group(chat_id, stream_data):
             await update.effective_message.reply_text(
                 f"🎧 Streaming in voice chat: {stream_data.title}"
