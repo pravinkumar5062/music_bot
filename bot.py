@@ -197,7 +197,7 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
 async def _play_in_group(chat_id: int, file_path: str) -> bool:
     group_call = await _start_group_call(chat_id)
     if group_call is None:
-        return False
+        raise RuntimeError("Group call client failed to initialize. Are TELEGRAM_API_ID and TELEGRAM_API_HASH set correctly?")
 
     try:
         await group_call.play(
@@ -205,8 +205,8 @@ async def _play_in_group(chat_id: int, file_path: str) -> bool:
             MediaStream(file_path, video_flags=MediaStream.Flags.IGNORE),
         )
         return True
-    except Exception:
-        return False
+    except Exception as e:
+        raise RuntimeError(f"PyTgCalls error: {e}")
 
 
 async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
