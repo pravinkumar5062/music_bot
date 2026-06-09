@@ -120,7 +120,7 @@ def get_player_keyboard(state: Dict[str, object] = None, duration_str: str = "0:
     is_shuffle = state.get("shuffle", False)
     repeat_mode = state.get("repeat", 0)
     
-    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume", style="success") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause", style="success")
+    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
     shuffle_text = "🔀 Shuffle On" if is_shuffle else "🔀 Shuffle"
     repeat_text = "🔁 Repeat On" if repeat_mode == 1 else "🔂 Repeat One" if repeat_mode == 2 else "🔁 Repeat"
     
@@ -129,22 +129,22 @@ def get_player_keyboard(state: Dict[str, object] = None, duration_str: str = "0:
             InlineKeyboardButton(duration_str, callback_data="ignore")
         ],
         [
-            InlineKeyboardButton("⏮ Previous", callback_data="btn_prev", style="primary"),
+            InlineKeyboardButton("⏮ Previous", callback_data="btn_prev"),
             play_pause_btn,
-            InlineKeyboardButton("⏭ Next", callback_data="btn_skip", style="primary")
+            InlineKeyboardButton("⏭ Next", callback_data="btn_skip")
         ],
         [
-            InlineKeyboardButton(shuffle_text, callback_data="btn_shuffle", style="primary"),
-            InlineKeyboardButton("⏩ Seek", callback_data="ignore", style="secondary"),
-            InlineKeyboardButton("🔁 Replay", callback_data="ignore", style="secondary")
+            InlineKeyboardButton(shuffle_text, callback_data="btn_shuffle"),
+            InlineKeyboardButton("⏩ Seek", callback_data="ignore"),
+            InlineKeyboardButton("🔁 Replay", callback_data="ignore")
         ],
         [
-            InlineKeyboardButton("🔉 Volume", callback_data="btn_volume", style="secondary"),
-            InlineKeyboardButton(repeat_text, callback_data="btn_repeat", style="primary"),
-            InlineKeyboardButton("✨ Effects", callback_data="btn_effects", style="secondary")
+            InlineKeyboardButton("🔉 Volume", callback_data="btn_volume"),
+            InlineKeyboardButton(repeat_text, callback_data="btn_repeat"),
+            InlineKeyboardButton("✨ Effects", callback_data="btn_effects")
         ],
         [
-            InlineKeyboardButton("❌ Close", callback_data="btn_close", style="danger")
+            InlineKeyboardButton("❌ Close", callback_data="btn_close")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -540,8 +540,15 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         song = await search_song(query)
         song.requested_by = update.effective_user.first_name if update.effective_user else "Unknown"
+        
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+            
         state = get_state(update.effective_chat.id)
         state["queue"].append(song)
+        
         queue_msg = await update.message.reply_text(
             f"✅ *Added to Queue*\n"
             f"━━━━━━━━━━━━━━━\n"
@@ -552,12 +559,12 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
         if not state["playing"]:
-            await play_next(update.effective_chat.id, update, context, play_messages=[status_msg, queue_msg])
-        else:
+            play_msg = await update.message.reply_text("▶️ *Playing your searched song...*", parse_mode="Markdown")
             try:
-                await status_msg.delete()
+                await queue_msg.delete()
             except Exception:
                 pass
+            await play_next(update.effective_chat.id, update, context, play_messages=[play_msg])
     except Exception as exc:
         message = str(exc)
         if "sign in to confirm" in message.lower() or "drm protected" in message.lower() or "are you a bot" in message.lower():
