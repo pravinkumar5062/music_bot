@@ -239,23 +239,17 @@ async def search_song(query: str) -> Song:
 
 
 async def get_stream_url(song: Song) -> Song:
-    # We must download the file locally. PyTgCalls/FFmpeg cannot reliably stream YouTube 
-    # URLs directly even with HTTP headers due to TLS fingerprinting and IP throttling.
-    file_id = "".join(x for x in song.title if x.isalnum())[:20]
-    out_file = os.path.join(tempfile.gettempdir(), f"{file_id}.%(ext)s")
-
-    ydl_opts = build_ydl_opts(download=True)
+    ydl_opts = build_ydl_opts(download=False)
     ydl_opts.update({
         "extract_flat": False,
-        "outtmpl": out_file,
     })
 
     loop = asyncio.get_running_loop()
 
     def _extract() -> str:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(song.url, download=True)
-            return ydl.prepare_filename(info)
+            info = ydl.extract_info(song.url, download=False)
+            return info.get("url", song.url)
 
     song.file_path = await loop.run_in_executor(None, _extract)
     return song
@@ -343,21 +337,10 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
     state["playing"] = True
 
     try:
-        status_msg = await update.effective_message.reply_text(f"📥 Downloading audio for {current.title} (this takes a few seconds)...")
         stream_data = await get_stream_url(current)
-        await status_msg.delete()
 
-        import shutil
-        ffmpeg_path = shutil.which("ffmpeg")
-        file_size = 0
-        if os.path.exists(stream_data.file_path):
-            file_size = os.path.getsize(stream_data.file_path)
-
-        diag_msg = f"🔍 Diagnostics:\n- FFmpeg path: {ffmpeg_path}\n- File size: {file_size / 1024 / 1024:.2f} MB"
-        await update.effective_message.reply_text(diag_msg)
-
-        if file_size < 1000:
-            raise RuntimeError("The downloaded audio file is extremely small (likely 0 bytes or an error page). YouTube blocked the download.")
+        if not stream_data.file_path:
+            raise RuntimeError("Failed to extract streaming URL.")
 
         if await _play_in_group(chat_id, stream_data):
             msg_text = (
@@ -372,14 +355,7 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                 reply_markup=get_player_keyboard(is_paused=False)
             )
             
-            # Delete the previous song's file to save disk space on Render
-            last_file = state.get("last_file_path")
-            if last_file and os.path.exists(last_file):
-                try:
-                    os.remove(last_file)
-                except Exception:
-                    pass
-            state["last_file_path"] = stream_data.file_path
+            # No local files to delete since we are directly streaming!
             
         else:
             await update.effective_message.reply_text(
