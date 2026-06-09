@@ -80,18 +80,27 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "extractor_args": {"youtube": {"player_client": ["android"]}},
     }
 
-    # Support cookies file for bypassing bot protection
-    cookie_path = os.getenv("YOUTUBE_COOKIES_FILE", "cookies.txt")
-    if os.path.exists(cookie_path):
-        opts["cookiefile"] = cookie_path
-    elif "YOUTUBE_COOKIES" in os.environ:
-        cookie_text = os.environ["YOUTUBE_COOKIES"]
-        if not hasattr(build_ydl_opts, "temp_cookie_file"):
-            fd, path = tempfile.mkstemp(prefix="yt_cookies_", suffix=".txt", text=True)
-            with os.fdopen(fd, 'w') as f:
-                f.write(cookie_text)
-            build_ydl_opts.temp_cookie_file = path
-        opts["cookiefile"] = build_ydl_opts.temp_cookie_file
+    # Support cookies from browser (e.g. YOUTUBE_COOKIES_FROM_BROWSER=chrome)
+    browser_cookies = os.getenv("YOUTUBE_COOKIES_FROM_BROWSER")
+    if browser_cookies:
+        if ":" in browser_cookies:
+            browser, profile = browser_cookies.split(":", 1)
+            opts["cookiesfrombrowser"] = (browser, profile)
+        else:
+            opts["cookiesfrombrowser"] = (browser_cookies,)
+    else:
+        # Support cookies file for bypassing bot protection
+        cookie_path = os.getenv("YOUTUBE_COOKIES_FILE", "cookies.txt")
+        if os.path.exists(cookie_path):
+            opts["cookiefile"] = cookie_path
+        elif "YOUTUBE_COOKIES" in os.environ:
+            cookie_text = os.environ["YOUTUBE_COOKIES"]
+            if not hasattr(build_ydl_opts, "temp_cookie_file"):
+                fd, path = tempfile.mkstemp(prefix="yt_cookies_", suffix=".txt", text=True)
+                with os.fdopen(fd, 'w') as f:
+                    f.write(cookie_text)
+                build_ydl_opts.temp_cookie_file = path
+            opts["cookiefile"] = build_ydl_opts.temp_cookie_file
 
     return opts
 
