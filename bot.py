@@ -54,6 +54,7 @@ class Song:
     thumbnail: str
     uploader: str
     file_path: str = ""
+    headers: dict = None
 
 
 CHAT_STATES: Dict[int, Dict[str, object]] = {}
@@ -158,25 +159,24 @@ async def search_song(query: str) -> Song:
 
 
 async def get_stream_url(song: Song) -> Song:
-    # We must download the file locally. Passing direct YouTube URLs to FFmpeg 
-    # results in 403 Forbidden and silent playback because FFmpeg lacks the Chrome impersonation headers.
-    file_id = "".join(x for x in song.title if x.isalnum())[:20]
-    out_file = os.path.join(tempfile.gettempdir(), f"{file_id}.%(ext)s")
-
-    ydl_opts = build_ydl_opts(download=True)
+    ydl_opts = build_ydl_opts(download=False)
     ydl_opts.update({
         "extract_flat": False,
-        "outtmpl": out_file,
     })
 
     loop = asyncio.get_running_loop()
 
-    def _extract() -> str:
+    def _extract() -> dict:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(song.url, download=True)
-            return ydl.prepare_filename(info)
+            return ydl.extract_info(song.url, download=False)
 
-    song.file_path = await loop.run_in_executor(None, _extract)
+    info = await loop.run_in_executor(None, _extract)
+    
+    if not info.get("url"):
+        raise ValueError("Could not extract a valid stream URL.")
+        
+    song.file_path = info["url"]
+    song.headers = info.get("http_headers")
     return song
 
 
@@ -204,7 +204,7 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
     return GROUP_CALL_INSTANCE
 
 
-async def _play_in_group(chat_id: int, file_path: str) -> bool:
+async def _play_in_group(chat_id: int, song: Song) -> bool:
     group_call = await _start_group_call(chat_id)
     if group_call is None:
         raise RuntimeError("Group call client failed to initialize. Are TELEGRAM_API_ID and TELEGRAM_API_HASH set correctly?")
@@ -224,7 +224,11 @@ async def _play_in_group(chat_id: int, file_path: str) -> bool:
 
         await group_call.play(
             chat_id,
-            MediaStream(file_path, video_flags=MediaStream.Flags.IGNORE),
+            MediaStream(
+                song.file_path, 
+                video_flags=MediaStream.Flags.IGNORE,
+                headers=song.headers
+            ),
         )
         return True
     except Exception as e:
@@ -248,7 +252,7 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
     try:
         stream_data = await get_stream_url(current)
 
-        if await _play_in_group(chat_id, stream_data.file_path):
+        if await _play_in_group(chat_id, stream_data):
             await update.effective_message.reply_text(
                 f"🎧 Streaming in voice chat: {stream_data.title}"
             )
