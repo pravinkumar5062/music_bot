@@ -44,7 +44,7 @@ from typing import Dict, List, Optional
 import yt_dlp
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
 from pyrogram import Client as PyrogramClient
 import pyrogram.errors
@@ -97,6 +97,22 @@ def escape_md(text: str) -> str:
     escape_chars = r"_*[]()~`>#+-=|{}.!"
     import re
     return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", str(text))
+
+
+def get_start_keyboard():
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    keyboard = [
+        [InlineKeyboardButton("✨ 🔍 Play Music", callback_data="cmd_play")],
+        [
+            InlineKeyboardButton("✨ 📜 View Queue", callback_data="cmd_queue"),
+            InlineKeyboardButton("✨ 🎧 Now Playing", callback_data="cmd_now")
+        ],
+        [
+            InlineKeyboardButton("✨ ⏭ Skip Track", callback_data="cmd_skip"),
+            InlineKeyboardButton("✨ 🛑 Stop Music", callback_data="cmd_stop")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 def get_player_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
     play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
@@ -384,14 +400,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🎵 *Advanced Music Bot*\n"
         "━━━━━━━━━━━━━━━\n"
         "Welcome! I am ready to play your favorite tracks directly in the Voice Chat. 🎧\n\n"
-        "*Commands:*\n"
-        "🔍 `/play <song>` • Search & add to queue\n"
-        "📜 `/queue` • View the upcoming tracks\n"
-        "⏭ `/skip` • Jump to the next song\n"
-        "🎼 `/now` • See the current track\n"
-        "⏹ `/stop` • Clear queue & disconnect",
+        "👇 *Tap the colorful buttons below to control the music!*\n"
+        "• *Play Music:* Opens the typing bar to search for a song.\n"
+        "• *Other Buttons:* Instantly execute their actions with one tap!",
         parse_mode="Markdown",
-        reply_markup=get_player_keyboard(is_paused=state.get("paused", False))
+        reply_markup=get_start_keyboard()
     )
 
 
@@ -498,7 +511,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🎼 `/now` • See the current track\n"
         "⏹ `/stop` • Clear queue & disconnect",
         parse_mode="Markdown",
-        reply_markup=get_player_keyboard(is_paused=state.get("paused", False))
+        reply_markup=get_start_keyboard()
     )
 
 
@@ -521,6 +534,32 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = query.message.chat.id
     state = get_state(chat_id)
     
+
+    if data == "cmd_play":
+        from telegram import ForceReply
+        await query.message.reply_text(
+            "🎵 *What do you want to play?*\n\n✨ _Type the name of the song or send a YouTube link below:_",
+            parse_mode="Markdown",
+            reply_markup=ForceReply(selective=True)
+        )
+        return
+    elif data == "cmd_queue":
+        await query.answer()
+        await queue_cmd(update, context)
+        return
+    elif data == "cmd_now":
+        await query.answer()
+        await now_playing(update, context)
+        return
+    elif data == "cmd_skip":
+        await query.answer()
+        await skip(update, context)
+        return
+    elif data == "cmd_stop":
+        await query.answer()
+        await stop(update, context)
+        return
+
     if data == "btn_not_impl":
         await query.answer("This feature is coming soon!", show_alert=True)
         return
@@ -574,6 +613,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             logging.error(f"Failed to pause/resume: {e}")
             await query.answer("Error occurred", show_alert=True)
 
+
+async def handle_force_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message and update.message.reply_to_message:
+        if "What do you want to play?" in update.message.reply_to_message.text:
+            context.args = update.message.text.split()
+            await play(update, context)
+
 def main() -> None:
     if not TOKEN:
         raise RuntimeError(
@@ -607,6 +653,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("diagnostics", diagnostics_cmd))
     application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_force_reply))
 
     try:
         if webhook_url:
