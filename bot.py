@@ -43,8 +43,8 @@ from typing import Dict, List, Optional
 
 import yt_dlp
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
 from pyrogram import Client as PyrogramClient
 import pyrogram.errors
@@ -83,10 +83,37 @@ class Song:
     uploader: str
     file_path: str = ""
     headers: dict = None
+    requested_by: str = "Unknown"
 
 
 CHAT_STATES: Dict[int, Dict[str, object]] = {}
 
+
+
+def get_player_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
+    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("⏪ Rewind", callback_data="btn_not_impl"),
+            play_pause_btn,
+            InlineKeyboardButton("⏩ Seek", callback_data="btn_not_impl")
+        ],
+        [
+            InlineKeyboardButton("🔀 Shuffle", callback_data="btn_not_impl"),
+            InlineKeyboardButton("⏭ Skip", callback_data="btn_skip"),
+            InlineKeyboardButton("🔁 Replay", callback_data="btn_not_impl")
+        ],
+        [
+            InlineKeyboardButton("🔉 Volume", callback_data="btn_not_impl"),
+            InlineKeyboardButton("🔁 Repeat", callback_data="btn_not_impl"),
+            InlineKeyboardButton("✨ Effects", callback_data="btn_not_impl")
+        ],
+        [
+            InlineKeyboardButton("❌ Close", callback_data="btn_close")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 def get_state(chat_id: int) -> Dict[str, object]:
     if chat_id not in CHAT_STATES:
@@ -94,6 +121,7 @@ def get_state(chat_id: int) -> Dict[str, object]:
             "queue": [],
             "current": None,
             "playing": False,
+            "paused": False,
         }
     return CHAT_STATES[chat_id]
 
@@ -308,13 +336,16 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             raise RuntimeError("The downloaded audio file is extremely small (likely 0 bytes or an error page). YouTube blocked the download.")
 
         if await _play_in_group(chat_id, stream_data):
-            await update.effective_message.reply_text(
-                f"🎧 *Now Playing*\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"🎵 *Track:* {stream_data.title}\n"
-                f"👤 *Artist:* {stream_data.uploader}\n"
-                f"⏱ *Duration:* {stream_data.duration // 60}m {stream_data.duration % 60}s",
-                parse_mode="Markdown"
+            msg_text = (
+                f"🎵 *Music Playlist:*\n\n"
+                f"1. 🎸 {stream_data.title} — {stream_data.uploader}\n"
+                f"🏆 *Requested by:* {stream_data.requested_by}\n\n"
+                f"⏱ {stream_data.duration // 60}:{stream_data.duration % 60:02d} ▷ ───────────"
+            )
+            state["player_message"] = await update.effective_message.reply_text(
+                msg_text,
+                parse_mode="Markdown",
+                reply_markup=get_player_keyboard(is_paused=False)
             )
             
             # Delete the previous song's file to save disk space on Render
@@ -362,6 +393,7 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         song = await search_song(query)
+        song.requested_by = update.effective_user.first_name if update.effective_user else "Unknown"
         state = get_state(update.effective_chat.id)
         state["queue"].append(song)
         await update.message.reply_text(
@@ -421,13 +453,16 @@ async def now_playing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     state = get_state(update.effective_chat.id)
     current = state.get("current")
     if current:
+        msg_text = (
+            f"🎵 *Music Playlist:*\n\n"
+            f"1. 🎸 {current.title} — {current.uploader}\n"
+            f"🏆 *Requested by:* {current.requested_by}\n\n"
+            f"⏱ {current.duration // 60}:{current.duration % 60:02d} ▷ ───────────"
+        )
         await update.message.reply_text(
-            f"🎧 *Now Playing*\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🎵 *Track:* {current.title}\n"
-            f"👤 *Artist:* {current.uploader}\n"
-            f"⏱ *Duration:* {current.duration // 60}m {current.duration % 60}s",
-            parse_mode="Markdown"
+            msg_text,
+            parse_mode="Markdown",
+            reply_markup=get_player_keyboard(is_paused=state.get("paused", False))
         )
     else:
         await update.message.reply_text("🔇 _Nothing is playing right now._", parse_mode="Markdown")
@@ -466,6 +501,67 @@ async def diagnostics_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
     await update.message.reply_text(f"📝 **System Logs:**\n```\n{logs}\n```", parse_mode="Markdown")
 
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    
+    data = query.data
+    chat_id = query.message.chat.id
+    state = get_state(chat_id)
+    
+    if data == "btn_not_impl":
+        await query.answer("This feature is coming soon!", show_alert=True)
+        return
+        
+    if data == "btn_skip":
+        await query.answer("Skipping...")
+        await play_next(chat_id, update, context)
+        return
+        
+    if data == "btn_close":
+        await query.answer("Playback closed.")
+        state["queue"] = []
+        state["current"] = None
+        state["playing"] = False
+        await query.message.delete()
+        if GROUP_CALL_INSTANCE:
+            try:
+                pass
+            except Exception:
+                pass
+        return
+        
+    if data == "btn_pause" or data == "btn_resume":
+        if not GROUP_CALL_INSTANCE:
+            await query.answer("Not playing", show_alert=True)
+            return
+        try:
+            if data == "btn_pause":
+                await GROUP_CALL_INSTANCE.pause_stream(chat_id)
+                state["paused"] = True
+                await query.answer("Paused")
+            else:
+                await GROUP_CALL_INSTANCE.resume_stream(chat_id)
+                state["paused"] = False
+                await query.answer("Resumed")
+                
+            current = state.get("current")
+            if current:
+                msg_text = (
+                    f"🎵 *Music Playlist:*\n\n"
+                    f"1. 🎸 {current.title} — {current.uploader}\n"
+                    f"🏆 *Requested by:* {current.requested_by}\n\n"
+                    f"⏱ {current.duration // 60}:{current.duration % 60:02d} ▷ ───────────"
+                )
+                await query.edit_message_text(
+                    text=msg_text,
+                    parse_mode="Markdown",
+                    reply_markup=get_player_keyboard(is_paused=state["paused"])
+                )
+        except Exception as e:
+            logging.error(f"Failed to pause/resume: {e}")
+            await query.answer("Error occurred", show_alert=True)
+
 def main() -> None:
     if not TOKEN:
         raise RuntimeError(
@@ -498,6 +594,7 @@ def main() -> None:
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("diagnostics", diagnostics_cmd))
+    application.add_handler(CallbackQueryHandler(button_handler))
 
     try:
         if webhook_url:
