@@ -9,7 +9,8 @@ import logging
 
 try:
     import imageio_ffmpeg
-    os.environ["PATH"] += os.pathsep + os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
+    # Prepend to PATH so it overrides any broken system FFmpeg
+    os.environ["PATH"] = os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe()) + os.pathsep + os.environ["PATH"]
 except ImportError:
     pass
 
@@ -237,6 +238,13 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
                 video_flags=MediaStream.Flags.IGNORE
             ),
         )
+        
+        # Explicitly force unmute (some groups mute new participants by default)
+        try:
+            await group_call.change_volume_call(chat_id, 100)
+        except Exception:
+            pass
+            
         return True
     except Exception as e:
         raise RuntimeError(f"PyTgCalls error: {e}")
