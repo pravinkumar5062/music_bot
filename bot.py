@@ -120,7 +120,7 @@ def get_player_keyboard(state: Dict[str, object] = None, duration_str: str = "0:
     is_shuffle = state.get("shuffle", False)
     repeat_mode = state.get("repeat", 0)
     
-    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
+    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume", style="success") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause", style="success")
     shuffle_text = "🔀 Shuffle On" if is_shuffle else "🔀 Shuffle"
     repeat_text = "🔁 Repeat On" if repeat_mode == 1 else "🔂 Repeat One" if repeat_mode == 2 else "🔁 Repeat"
     
@@ -144,7 +144,7 @@ def get_player_keyboard(state: Dict[str, object] = None, duration_str: str = "0:
             InlineKeyboardButton("✨ Effects", callback_data="btn_effects")
         ],
         [
-            InlineKeyboardButton("❌ Close", callback_data="btn_close")
+            InlineKeyboardButton("❌ Close", callback_data="btn_close", style="danger")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -535,7 +535,11 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /play <song name or YouTube URL>")
         return
 
-    status_msg = await update.message.reply_text("🔎 *Searching for your song, please wait...*", parse_mode="Markdown")
+    status_msg = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔎 *Searching for your song, please wait...*", 
+        parse_mode="Markdown"
+    )
 
     try:
         song = await search_song(query)
@@ -549,21 +553,33 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         state = get_state(update.effective_chat.id)
         state["queue"].append(song)
         
-        queue_msg = await update.message.reply_text(
-            f"✅ *Added to Queue*\n"
-            f"━━━━━━━━━━━━━━━\n"
-            f"🎵 *Track:* {escape_md(song.title)}\n"
-            f"👤 *Artist:* {escape_md(song.uploader)}\n"
-            f"⏱ *Duration:* {song.duration // 60}m {song.duration % 60}s",
+        queue_msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(
+                f"✅ *Added to Queue*\n"
+                f"━━━━━━━━━━━━━━━\n"
+                f"🎵 *Track:* {escape_md(song.title)}\n"
+                f"👤 *Artist:* {escape_md(song.uploader)}\n"
+                f"⏱ *Duration:* {song.duration // 60}m {song.duration % 60}s"
+            ),
             parse_mode="Markdown"
         )
 
         if not state["playing"]:
-            play_msg = await update.message.reply_text("▶️ *Playing your searched song...*", parse_mode="Markdown")
-            try:
-                await queue_msg.delete()
-            except Exception:
-                pass
+            # Delete the queue message in the background after 5 seconds so the user has time to read it
+            async def _delete_later(msg):
+                await asyncio.sleep(5)
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+            asyncio.create_task(_delete_later(queue_msg))
+            
+            play_msg = await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="▶️ *Playing your searched song...*", 
+                parse_mode="Markdown"
+            )
             await play_next(update.effective_chat.id, update, context, play_messages=[play_msg])
     except Exception as exc:
         message = str(exc)
