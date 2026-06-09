@@ -211,8 +211,14 @@ async def _play_in_group(chat_id: int, file_path: str) -> bool:
         # Resolve the chat peer to prevent 'Peer id invalid' errors on fresh sessions
         try:
             await GROUP_CALL_CLIENT.get_chat(chat_id)
-        except Exception:
-            pass
+        except Exception as e:
+            # If get_chat fails (usually because the integer ID is not cached), fetch dialogs to cache peers
+            try:
+                async for _ in GROUP_CALL_CLIENT.get_dialogs(limit=50):
+                    pass
+                await GROUP_CALL_CLIENT.get_chat(chat_id)
+            except Exception as e2:
+                raise RuntimeError(f"Failed to resolve chat ID {chat_id} for the Assistant account. Ensure the Assistant account is actually a member of this group! Error: {e2}")
 
         await group_call.play(
             chat_id,
