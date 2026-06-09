@@ -90,6 +90,14 @@ CHAT_STATES: Dict[int, Dict[str, object]] = {}
 
 
 
+
+def escape_md(text: str) -> str:
+    if not text:
+        return ""
+    escape_chars = r"_*[]()~`>#+-=|{}.!"
+    import re
+    return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", str(text))
+
 def get_player_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
     play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
     
@@ -128,7 +136,8 @@ def get_state(chat_id: int) -> Dict[str, object]:
 
 def build_ydl_opts(*, download: bool = False) -> dict:
     opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio[abr<=128]/bestaudio/best",
+        "keepvideo": False,
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
@@ -176,7 +185,7 @@ async def search_song(query: str) -> Song:
 
     for search_prefix in ("ytsearch1:", "scsearch1:"):
         ydl_opts = build_ydl_opts(download=False)
-        ydl_opts.update({"extract_flat": False})
+        ydl_opts.update({"extract_flat": True})
 
         loop = asyncio.get_running_loop()
 
@@ -338,8 +347,8 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
         if await _play_in_group(chat_id, stream_data):
             msg_text = (
                 f"🎵 *Music Playlist:*\n\n"
-                f"1. 🎸 {stream_data.title} — {stream_data.uploader}\n"
-                f"🏆 *Requested by:* {stream_data.requested_by}\n\n"
+                f"1. 🎸 {escape_md(stream_data.title)} — {escape_md(stream_data.uploader)}\n"
+                f"🏆 *Requested by:* {escape_md(stream_data.requested_by)}\n\n"
                 f"⏱ {stream_data.duration // 60}:{stream_data.duration % 60:02d} ▷ ───────────"
             )
             state["player_message"] = await update.effective_message.reply_text(
@@ -399,8 +408,8 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
             f"✅ *Added to Queue*\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"🎵 *Track:* {song.title}\n"
-            f"👤 *Artist:* {song.uploader}\n"
+            f"🎵 *Track:* {escape_md(song.title)}\n"
+            f"👤 *Artist:* {escape_md(song.uploader)}\n"
             f"⏱ *Duration:* {song.duration // 60}m {song.duration % 60}s",
             parse_mode="Markdown"
         )
@@ -425,14 +434,14 @@ async def queue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = ["📜 *Current Queue*\n━━━━━━━━━━━━━━━"]
 
     if current:
-        lines.append(f"🔊 *Playing Now:*\n{current.title}\n")
+        lines.append(f"🔊 *Playing Now:*\n{escape_md(current.title)}\n")
     else:
         lines.append("🔊 *Playing Now:*\n_Nothing_\n")
 
     if songs:
         lines.append("⏳ *Up Next:*")
         for index, song in enumerate(songs, start=1):
-            lines.append(f"{index}️⃣ {song.title} — {song.uploader}")
+            lines.append(f"{index}️⃣ {escape_md(song.title)} — {escape_md(song.uploader)}")
     else:
         lines.append("📭 _No songs in queue._")
 
@@ -455,8 +464,8 @@ async def now_playing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if current:
         msg_text = (
             f"🎵 *Music Playlist:*\n\n"
-            f"1. 🎸 {current.title} — {current.uploader}\n"
-            f"🏆 *Requested by:* {current.requested_by}\n\n"
+            f"1. 🎸 {escape_md(current.title)} — {escape_md(current.uploader)}\n"
+            f"🏆 *Requested by:* {escape_md(current.requested_by)}\n\n"
             f"⏱ {current.duration // 60}:{current.duration % 60:02d} ▷ ───────────"
         )
         await update.message.reply_text(
@@ -549,8 +558,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if current:
                 msg_text = (
                     f"🎵 *Music Playlist:*\n\n"
-                    f"1. 🎸 {current.title} — {current.uploader}\n"
-                    f"🏆 *Requested by:* {current.requested_by}\n\n"
+                    f"1. 🎸 {escape_md(current.title)} — {escape_md(current.uploader)}\n"
+                    f"🏆 *Requested by:* {escape_md(current.requested_by)}\n\n"
                     f"⏱ {current.duration // 60}:{current.duration % 60:02d} ▷ ───────────"
                 )
                 await query.edit_message_text(
