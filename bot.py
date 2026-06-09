@@ -77,6 +77,7 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "socket_timeout": 60,
         "retries": 5,
         "extractor_retries": 5,
+        "extractor_args": {"youtube": {"player_client": ["tv", "android", "web"]}},
     }
     
     if ImpersonateTarget is not None:
