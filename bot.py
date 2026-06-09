@@ -167,7 +167,7 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "extract_flat": False,
         "skip_download": not download,
         "socket_timeout": 60,
-        "extractor_retries": 5,
+        "extractor_retries": 1,
         "extractor_args": {"youtube": {"player_client": ["tv", "android", "web"]}},
         "js_runtimes": {"node": {}},
     }
@@ -272,7 +272,7 @@ async def get_stream_url(song: Song) -> Song:
             loop = asyncio.get_running_loop()
             def _extract_pytube():
                 from pytubefix import YouTube
-                yt = YouTube(song.url, use_oauth=False, allow_oauth_cache=False)
+                yt = YouTube(song.url, use_oauth=False, allow_oauth_cache=False, use_po_token=False)
                 audio_streams = yt.streams.filter(only_audio=True)
                 audio = audio_streams.order_by('abr').desc().first()
                 if audio and audio.url:
