@@ -447,7 +447,22 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                         queue.append(auto_song)
             except Exception as e:
                 logging.error(f"Autoplay failed: {e}")
-            await status_msg.delete()
+            
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+                
+            if queue:
+                # User requested the 'Playing' message to appear after Autoplay finishes, mimicking the /play command
+                play_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="▶️ *Playing next recommended song...*",
+                    parse_mode="Markdown"
+                )
+                if play_messages is None:
+                    play_messages = []
+                play_messages.append(play_msg)
 
         if not queue:
             state["playing"] = False
