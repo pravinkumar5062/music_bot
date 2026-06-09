@@ -357,38 +357,42 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                 queue.insert(0, current_song)
                 
         # Autoplay if queue is STILL empty (e.g. not repeating)
-        if not queue and current_song and ("youtube.com" in current_song.url or "youtu.be" in current_song.url):
-            import re
-            match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", current_song.url)
-            if match:
-                video_id = match.group(1)
-                mix_url = f"https://www.youtube.com/watch?v={video_id}&list=RD{video_id}"
-                try:
-                    loop = asyncio.get_running_loop()
-                    def _extract_mix():
-                        ydl_opts = build_ydl_opts(download=False)
-                        ydl_opts.update({"extract_flat": True, "playlist_items": "2"})
-                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                            info = ydl.extract_info(mix_url, download=False)
-                            if "entries" in info and len(info["entries"]) > 1:
-                                return info["entries"][1]
-                            return None
-                    
-                    entry = await loop.run_in_executor(None, _extract_mix)
-                    if entry:
-                        next_url = entry.get("url") or entry.get("webpage_url")
-                        if next_url:
-                            auto_song = Song(
-                                title=entry.get("title", "Untitled song"),
-                                url=next_url,
-                                duration=int(entry.get("duration", 0) or 0),
-                                thumbnail=entry.get("thumbnail", ""),
-                                uploader=entry.get("uploader", "Autoplay"),
-                                requested_by="🤖 Autoplay"
-                            )
-                            queue.append(auto_song)
-                except Exception as e:
-                    logging.error(f"Autoplay failed: {e}")
+        if not queue and current_song:
+            status_msg = await update.effective_message.reply_text("✨ *Autoplay:* Fetching next recommended song...", parse_mode="Markdown")
+            try:
+                loop = asyncio.get_running_loop()
+                def _extract_auto():
+                    ydl_opts = build_ydl_opts(download=False)
+                    ydl_opts.update({"extract_flat": True})
+                    uploader = current_song.uploader.replace(" - Topic", "").strip()
+                    search_query = f"ytsearch10:{uploader} track"
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(search_query, download=False)
+                        entries = info.get("entries", [])
+                        for e in entries:
+                            duration = e.get("duration", 0) or 0
+                            url = e.get("url", "")
+                            # Avoid playlists/long mixes (duration > 600s) and the exact same song
+                            if url and url != current_song.url and 0 < duration < 600:
+                                return e
+                        return None
+                
+                entry = await loop.run_in_executor(None, _extract_auto)
+                if entry:
+                    next_url = entry.get("url") or entry.get("webpage_url")
+                    if next_url:
+                        auto_song = Song(
+                            title=entry.get("title", "Untitled song"),
+                            url=next_url,
+                            duration=int(entry.get("duration", 0) or 0),
+                            thumbnail=entry.get("thumbnail", ""),
+                            uploader=entry.get("uploader", "Autoplay"),
+                            requested_by="🤖 Autoplay"
+                        )
+                        queue.append(auto_song)
+            except Exception as e:
+                logging.error(f"Autoplay failed: {e}")
+            await status_msg.delete()
 
         if not queue:
             state["playing"] = False
