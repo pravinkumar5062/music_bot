@@ -228,6 +228,15 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
             workdir=tempfile.gettempdir(),
         )
         GROUP_CALL_INSTANCE = PyTgCalls(GROUP_CALL_CLIENT)
+            
+        @GROUP_CALL_INSTANCE.on_network_status_changed()
+        async def on_network_status_changed(client, chat_id, status):
+            from pytgcalls.types import NetworkStatus
+            if status == NetworkStatus.CONNECTED:
+                print(f"[WebRTC] ✅ Successfully connected to Telegram voice server for chat {chat_id}!")
+            else:
+                print(f"[WebRTC] ⚠️ Network status changed for chat {chat_id}: {status}")
+
         await GROUP_CALL_INSTANCE.start()
 
     return GROUP_CALL_INSTANCE
@@ -259,11 +268,18 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
             ),
         )
         
-        # Explicitly force unmute (some groups mute new participants by default)
-        try:
-            await group_call.change_volume_call(chat_id, 100)
-        except Exception:
-            pass
+        # Explicitly force unmute after 3 seconds (some groups mute new participants by default)
+        # We must wait for WebRTC to connect and MTProto to cache the call object before unmuting!
+        async def delayed_unmute():
+            await asyncio.sleep(3)
+            try:
+                await group_call.unmute(chat_id)
+                await group_call.change_volume_call(chat_id, 100)
+                print(f"[WebRTC] 🎤 Explicitly sent UNMUTE request for {chat_id}")
+            except Exception as e:
+                print(f"[WebRTC] ⚠️ Failed to unmute: {e}")
+                
+        asyncio.create_task(delayed_unmute())
             
         return True
     except Exception as e:
