@@ -427,6 +427,17 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def diagnostics_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logs = "\n".join(log_history)
+    if not logs:
+        logs = "No logs recorded yet."
+    
+    # Send logs in chunks if too long
+    if len(logs) > 4000:
+        logs = logs[-4000:]
+        
+    await update.message.reply_text(f"📝 **System Logs:**\n```\n{logs}\n```", parse_mode="Markdown")
+
 def main() -> None:
     if not TOKEN:
         raise RuntimeError(
