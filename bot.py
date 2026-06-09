@@ -114,27 +114,32 @@ def get_start_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_player_keyboard(is_paused: bool = False) -> InlineKeyboardMarkup:
+def get_player_keyboard(state: Dict[str, object] = None) -> InlineKeyboardMarkup:
+    if not state: state = {}
+    is_paused = state.get("paused", False)
+    is_shuffle = state.get("shuffle", False)
+    repeat_mode = state.get("repeat", 0)
+    
     play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
+    shuffle_text = "🔀 Shuffle On" if is_shuffle else "🔀 Shuffle"
+    repeat_text = "🔁 Repeat On" if repeat_mode == 1 else "🔂 Repeat One" if repeat_mode == 2 else "🔁 Repeat"
     
     keyboard = [
         [
-            InlineKeyboardButton("⏪ Rewind", callback_data="btn_not_impl"),
+            InlineKeyboardButton("⏮ Previous", callback_data="btn_prev"),
             play_pause_btn,
-            InlineKeyboardButton("⏩ Seek", callback_data="btn_not_impl")
+            InlineKeyboardButton("⏭ Next", callback_data="btn_skip")
         ],
         [
-            InlineKeyboardButton("🔀 Shuffle", callback_data="btn_not_impl"),
-            InlineKeyboardButton("⏭ Skip", callback_data="btn_skip"),
-            InlineKeyboardButton("🔁 Replay", callback_data="btn_not_impl")
+            InlineKeyboardButton(shuffle_text, callback_data="btn_shuffle"),
+            InlineKeyboardButton(repeat_text, callback_data="btn_repeat")
         ],
         [
-            InlineKeyboardButton("🔉 Volume", callback_data="btn_not_impl"),
-            InlineKeyboardButton("🔁 Repeat", callback_data="btn_not_impl"),
-            InlineKeyboardButton("✨ Effects", callback_data="btn_not_impl")
+            InlineKeyboardButton("🔉 Volume", callback_data="btn_volume"),
+            InlineKeyboardButton("✨ Effects", callback_data="btn_effects")
         ],
         [
-            InlineKeyboardButton("❌ Close", callback_data="btn_close")
+            InlineKeyboardButton("❌ Close Player", callback_data="btn_close")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -143,9 +148,12 @@ def get_state(chat_id: int) -> Dict[str, object]:
     if chat_id not in CHAT_STATES:
         CHAT_STATES[chat_id] = {
             "queue": [],
+            "history": [],
             "current": None,
             "playing": False,
             "paused": False,
+            "shuffle": False,
+            "repeat": 0,
         }
     return CHAT_STATES[chat_id]
 
@@ -322,19 +330,48 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
         raise RuntimeError(f"PyTgCalls error: {e}")
 
 
-async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE, is_previous: bool = False) -> None:
     state = get_state(chat_id)
     queue: List[Song] = state["queue"]
+    history: List[Song] = state.setdefault("history", [])
+    
+    current_song = state.get("current")
 
-    if not queue:
-        state["playing"] = False
-        state["current"] = None
-        await update.effective_message.reply_text("Queue is empty. Add songs with /play.")
-        return
+    if is_previous:
+        if not history:
+            await update.effective_message.reply_text("No previous songs in history.")
+            return
+        if current_song:
+            queue.insert(0, current_song)
+        next_song = history.pop()
+    else:
+        if not queue:
+            state["playing"] = False
+            state["current"] = None
+            await update.effective_message.reply_text("Queue is empty. Add songs with /play.")
+            return
 
-    current = queue.pop(0)
-    state["current"] = current
+        if current_song:
+            history.append(current_song)
+            if len(history) > 50:
+                history.pop(0)
+            
+            repeat = state.get("repeat", 0)
+            if repeat == 1:
+                queue.append(current_song)
+            elif repeat == 2:
+                queue.insert(0, current_song)
+
+        if state.get("shuffle", False) and len(queue) > 1:
+            import random
+            idx = random.randint(0, len(queue) - 1)
+            next_song = queue.pop(idx)
+        else:
+            next_song = queue.pop(0)
+
+    state["current"] = next_song
     state["playing"] = True
+    current = next_song
 
     try:
         stream_data = await get_stream_url(current)
@@ -352,7 +389,7 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             state["player_message"] = await update.effective_message.reply_text(
                 msg_text,
                 parse_mode="Markdown",
-                reply_markup=get_player_keyboard(is_paused=False)
+                reply_markup=get_player_keyboard(state)
             )
             
             # No local files to delete since we are directly streaming!
@@ -461,7 +498,7 @@ async def now_playing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(
             msg_text,
             parse_mode="Markdown",
-            reply_markup=get_player_keyboard(is_paused=state.get("paused", False))
+            reply_markup=get_player_keyboard(state)
         )
     else:
         await update.message.reply_text("🔇 _Nothing is playing right now._", parse_mode="Markdown")
@@ -536,8 +573,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await stop(update, context)
         return
 
-    if data == "btn_not_impl":
-        await query.answer("This feature is coming soon!", show_alert=True)
+    if data in ["btn_not_impl", "btn_volume", "btn_effects"]:
+        await query.answer("This feature is not supported in high-speed streaming mode!", show_alert=True)
+        return
+        
+    if data == "btn_prev":
+        if not state.get("history"):
+            await query.answer("No previous song!", show_alert=True)
+            return
+        await query.answer("Playing previous song...")
+        await play_next(chat_id, update, context, is_previous=True)
+        return
+        
+    if data == "btn_shuffle":
+        state["shuffle"] = not state.get("shuffle", False)
+        await query.answer(f"Shuffle {'enabled' if state['shuffle'] else 'disabled'}")
+        if state.get("current"):
+            await query.edit_message_reply_markup(reply_markup=get_player_keyboard(state))
+        return
+        
+    if data == "btn_repeat":
+        state["repeat"] = (state.get("repeat", 0) + 1) % 3
+        modes = ["disabled", "Repeat All", "Repeat One"]
+        await query.answer(f"Repeat mode: {modes[state['repeat']]}")
+        if state.get("current"):
+            await query.edit_message_reply_markup(reply_markup=get_player_keyboard(state))
         return
         
     if data == "btn_skip":
@@ -583,7 +643,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await query.edit_message_text(
                     text=msg_text,
                     parse_mode="Markdown",
-                    reply_markup=get_player_keyboard(is_paused=state["paused"])
+                    reply_markup=get_player_keyboard(state)
                 )
         except Exception as e:
             logging.error(f"Failed to pause/resume: {e}")
