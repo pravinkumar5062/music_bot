@@ -1,5 +1,5 @@
 python-telegram-bot[webhooks]>=21.7
-yt-dlp[default]>=2024.12.13
+yt-dlp[default]>=2026.3.17
 python-dotenv>=1.0.0
 curl_cffi<0.15,>=0.10
 pyrogram>=2.0.106
