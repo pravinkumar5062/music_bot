@@ -76,12 +76,9 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "skip_download": not download,
         "socket_timeout": 60,
         "retries": 5,
-        "extractor_retries": 5,
         "extractor_args": {"youtube": {"player_client": ["tv", "android", "web"]}},
     }
-    
-    if ImpersonateTarget is not None:
-        opts["impersonate"] = ImpersonateTarget(client="chrome")
+
 
     # Support cookies from browser (e.g. YOUTUBE_COOKIES_FROM_BROWSER=chrome)
     browser_cookies = os.getenv("YOUTUBE_COOKIES_FROM_BROWSER")
