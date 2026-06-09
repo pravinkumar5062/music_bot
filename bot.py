@@ -80,6 +80,19 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "extractor_args": {"youtube": {"player_client": ["android"]}},
     }
 
+    # Support cookies file for bypassing bot protection
+    cookie_path = os.getenv("YOUTUBE_COOKIES_FILE", "cookies.txt")
+    if os.path.exists(cookie_path):
+        opts["cookiefile"] = cookie_path
+    elif "YOUTUBE_COOKIES" in os.environ:
+        cookie_text = os.environ["YOUTUBE_COOKIES"]
+        if not hasattr(build_ydl_opts, "temp_cookie_file"):
+            fd, path = tempfile.mkstemp(prefix="yt_cookies_", suffix=".txt", text=True)
+            with os.fdopen(fd, 'w') as f:
+                f.write(cookie_text)
+            build_ydl_opts.temp_cookie_file = path
+        opts["cookiefile"] = build_ydl_opts.temp_cookie_file
+
     return opts
 
 
@@ -126,38 +139,24 @@ async def search_song(query: str) -> Song:
     )
 
 
-async def download_song(song: Song) -> Song:
-    temp_dir = tempfile.gettempdir()
-    outtmpl = os.path.join(temp_dir, f"music_{abs(hash(song.url))}.%(ext)s")
-
-    ydl_opts = build_ydl_opts(download=True)
+async def get_stream_url(song: Song) -> Song:
+    ydl_opts = build_ydl_opts(download=False)
     ydl_opts.update({
-        "outtmpl": outtmpl,
-        "postprocessors": [],
-        "geo_bypass": True,
-        "nocheckcertificate": True,
-        "prefer_ffmpeg": True,
+        "extract_flat": False,
     })
 
     loop = asyncio.get_running_loop()
 
-    def _download() -> None:
+    def _extract() -> dict:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([song.url])
+            return ydl.extract_info(song.url, download=False)
 
-    await loop.run_in_executor(None, _download)
-
-    candidate = None
-    audio_exts = (".mp3", ".m4a", ".webm", ".ogg", ".opus", ".wav")
-    for file_name in sorted(os.listdir(temp_dir), key=lambda name: os.path.getmtime(os.path.join(temp_dir, name)), reverse=True):
-        if file_name.startswith("music_") and file_name.lower().endswith(audio_exts):
-            candidate = os.path.join(temp_dir, file_name)
-            break
-
-    if candidate is None:
-        raise FileNotFoundError("Audio file could not be downloaded.")
-
-    song.file_path = candidate
+    info = await loop.run_in_executor(None, _extract)
+    
+    if not info.get("url"):
+        raise ValueError("Could not extract a valid stream URL.")
+        
+    song.file_path = info["url"]
     return song
 
 
@@ -210,19 +209,15 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
     state["playing"] = True
 
     try:
-        downloaded = await download_song(current)
+        stream_data = await get_stream_url(current)
 
-        if await _play_in_group(chat_id, downloaded.file_path):
+        if await _play_in_group(chat_id, stream_data.file_path):
             await update.effective_message.reply_text(
-                f"🎧 Playing in voice chat: {downloaded.title}"
+                f"🎧 Streaming in voice chat: {stream_data.title}"
             )
         else:
-            await update.effective_message.reply_audio(
-                audio=downloaded.file_path,
-                title=downloaded.title,
-                performer=downloaded.uploader,
-                duration=downloaded.duration,
-                caption=f"Now playing: {downloaded.title}",
+            await update.effective_message.reply_text(
+                "Group call is not configured correctly or bot is not an admin."
             )
     except Exception as exc:
         await update.effective_message.reply_text(f"Playback failed: {exc}")
