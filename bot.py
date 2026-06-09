@@ -265,7 +265,6 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
             await asyncio.sleep(3)
             try:
                 await group_call.unmute(chat_id)
-                await group_call.change_volume_call(chat_id, 100)
                 print(f"[WebRTC] 🎤 Explicitly sent UNMUTE request for {chat_id}")
             except Exception as e:
                 print(f"[WebRTC] ⚠️ Failed to unmute: {e}")
