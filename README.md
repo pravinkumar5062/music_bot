@@ -10,12 +10,15 @@ A simple Telegram music bot that can:
 ## Setup
 
 1. Create a Telegram bot with BotFather and copy its token.
-2. Create a local .env file and add your token:
-   TELEGRAM_BOT_TOKEN=your_token_here
-3. Keep the .env file local; Render will provide the token in production.
-4. Install dependencies:
+2. Create a Telegram API app at my.telegram.org and copy API_ID and API_HASH.
+3. Create a local .env file and add:
+   TELEGRAM_BOT_TOKEN=your_bot_token
+   TELEGRAM_API_ID=your_api_id
+   TELEGRAM_API_HASH=your_api_hash
+4. Keep the .env file local; Render will provide the bot token and app credentials in production.
+5. Install dependencies:
    pip install -r requirements.txt
-5. Run the bot:
+6. Run the bot:
    python bot.py
 
 ## Notes
