@@ -338,6 +338,11 @@ def main() -> None:
             "Set TELEGRAM_BOT_TOKEN (or BOT_TOKEN/TOKEN) in your environment or .env file."
         )
 
+    port = int(os.getenv("PORT", "10000"))
+    webhook_url = os.getenv("WEBHOOK_URL")
+    if not webhook_url and os.getenv("RENDER_EXTERNAL_URL"):
+        webhook_url = f"{os.getenv('RENDER_EXTERNAL_URL').rstrip('/')}/telegram"
+
     lock_fd = None
     if fcntl is not None:
         try:
@@ -360,7 +365,16 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_cmd))
 
     try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+        if webhook_url:
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=port,
+                url_path="telegram",
+                webhook_url=webhook_url,
+                drop_pending_updates=True,
+            )
+        else:
+            application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
     finally:
         if lock_fd is not None and fcntl is not None:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
