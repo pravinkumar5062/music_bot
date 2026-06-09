@@ -252,6 +252,16 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             await update.effective_message.reply_text(
                 f"🎧 Streaming in voice chat: {stream_data.title}"
             )
+            
+            # Delete the previous song's file to save disk space on Render
+            last_file = state.get("last_file_path")
+            if last_file and os.path.exists(last_file):
+                try:
+                    os.remove(last_file)
+                except Exception:
+                    pass
+            state["last_file_path"] = stream_data.file_path
+            
         else:
             await update.effective_message.reply_text(
                 "Group call is not configured correctly or bot is not an admin."
