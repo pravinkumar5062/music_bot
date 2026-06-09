@@ -208,6 +208,12 @@ async def _play_in_group(chat_id: int, file_path: str) -> bool:
         raise RuntimeError("Group call client failed to initialize. Are TELEGRAM_API_ID and TELEGRAM_API_HASH set correctly?")
 
     try:
+        # Resolve the chat peer to prevent 'Peer id invalid' errors on fresh sessions
+        try:
+            await GROUP_CALL_CLIENT.get_chat(chat_id)
+        except Exception:
+            pass
+
         await group_call.play(
             chat_id,
             MediaStream(file_path, video_flags=MediaStream.Flags.IGNORE),
