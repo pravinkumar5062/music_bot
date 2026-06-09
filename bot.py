@@ -114,32 +114,37 @@ def get_start_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_player_keyboard(state: Dict[str, object] = None) -> InlineKeyboardMarkup:
+def get_player_keyboard(state: Dict[str, object] = None, duration_str: str = "0:00 ▷ ─────────── 0:00") -> InlineKeyboardMarkup:
     if not state: state = {}
     is_paused = state.get("paused", False)
     is_shuffle = state.get("shuffle", False)
     repeat_mode = state.get("repeat", 0)
     
-    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause")
+    play_pause_btn = InlineKeyboardButton("▶️ Resume", callback_data="btn_resume", style="success") if is_paused else InlineKeyboardButton("⏸ Pause", callback_data="btn_pause", style="success")
     shuffle_text = "🔀 Shuffle On" if is_shuffle else "🔀 Shuffle"
     repeat_text = "🔁 Repeat On" if repeat_mode == 1 else "🔂 Repeat One" if repeat_mode == 2 else "🔁 Repeat"
     
     keyboard = [
         [
-            InlineKeyboardButton("⏮ Previous", callback_data="btn_prev"),
+            InlineKeyboardButton(duration_str, callback_data="ignore")
+        ],
+        [
+            InlineKeyboardButton("◁◁ Rewind", callback_data="btn_prev"),
             play_pause_btn,
-            InlineKeyboardButton("⏭ Next", callback_data="btn_skip")
+            InlineKeyboardButton("▷▷ Seek", callback_data="ignore")
         ],
         [
             InlineKeyboardButton(shuffle_text, callback_data="btn_shuffle"),
-            InlineKeyboardButton(repeat_text, callback_data="btn_repeat")
+            InlineKeyboardButton("▷▷| Skip", callback_data="btn_skip"),
+            InlineKeyboardButton("🔁 Replay", callback_data="btn_replay")
         ],
         [
             InlineKeyboardButton("🔉 Volume", callback_data="btn_volume"),
+            InlineKeyboardButton(repeat_text, callback_data="btn_repeat"),
             InlineKeyboardButton("✨ Effects", callback_data="btn_effects")
         ],
         [
-            InlineKeyboardButton("❌ Close Player", callback_data="btn_close")
+            InlineKeyboardButton("❌ Close", callback_data="btn_close", style="danger")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -476,14 +481,17 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             msg_text = (
                 f"🎵 *Music Playlist:*\n\n"
                 f"1. 🎸 **{escape_md(stream_data.title)}** — **{escape_md(stream_data.uploader)}**\n"
-                f"🏆 *Requested by:* **{escape_md(stream_data.requested_by)}**\n\n"
-                f"                      ⏱ {stream_data.duration // 60}:{stream_data.duration % 60:02d} ▷ ───────────"
+                f"🏆 *Requested by:* **{escape_md(stream_data.requested_by)}**"
             )
+            dur_m = stream_data.duration // 60
+            dur_s = stream_data.duration % 60
+            duration_str = f"0:00 ▷ ─────────── {dur_m}:{dur_s:02d}"
+            
             state["player_message"] = await context.bot.send_message(
                 chat_id=chat_id,
                 text=msg_text,
                 parse_mode="Markdown",
-                reply_markup=get_player_keyboard(state)
+                reply_markup=get_player_keyboard(state, duration_str)
             )
             
             if play_messages:
@@ -764,10 +772,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def handle_force_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Check if it's a reply to the prompt
     if update.message and update.message.reply_to_message:
         if "What do you want to play?" in update.message.reply_to_message.text:
             context.args = update.message.text.split()
             await play(update, context)
+            return
+            
+    # If not a reply, but in a private chat, assume it's a search!
+    if update.effective_chat.type == "private":
+        context.args = update.message.text.split()
+        await play(update, context)
+        return
+        
+    # In groups, we don't want to trigger on every random message, so we just ignore.
 
 def main() -> None:
     if not TOKEN:
@@ -802,7 +820,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(CommandHandler("diagnostics", diagnostics_cmd))
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.REPLY & filters.TEXT, handle_force_reply))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_force_reply))
 
     try:
         if webhook_url:
