@@ -348,7 +348,12 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
         if not queue:
             state["playing"] = False
             state["current"] = None
-            await update.effective_message.reply_text("Queue is empty. Add songs with /play.")
+            if GROUP_CALL_INSTANCE:
+                try:
+                    await GROUP_CALL_INSTANCE.leave_call(chat_id)
+                except Exception:
+                    pass
+            await update.effective_message.reply_text("Queue is empty. Playback stopped. Add songs with /play.")
             return
 
         if current_song:
@@ -505,10 +510,16 @@ async def now_playing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    state = get_state(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    state = get_state(chat_id)
     state["queue"] = []
     state["current"] = None
     state["playing"] = False
+    if GROUP_CALL_INSTANCE:
+        try:
+            await GROUP_CALL_INSTANCE.leave_call(chat_id)
+        except Exception:
+            pass
     await update.message.reply_text("🛑 Playback stopped and queue cleared.")
 
 
@@ -613,7 +624,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.message.delete()
         if GROUP_CALL_INSTANCE:
             try:
-                pass
+                await GROUP_CALL_INSTANCE.leave_call(chat_id)
             except Exception:
                 pass
         return
