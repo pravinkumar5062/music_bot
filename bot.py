@@ -14,14 +14,9 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-try:
-    from pyrogram import Client as PyrogramClient
-    from pytgcalls import PyTgCalls
-    from pytgcalls.types import MediaStream
-except Exception:  # pragma: no cover - optional group-call dependencies
-    PyrogramClient = None
-    PyTgCalls = None
-    MediaStream = None
+from pyrogram import Client as PyrogramClient
+from pytgcalls import PyTgCalls
+from pytgcalls.types import MediaStream
 
 try:
     from yt_dlp.networking.impersonate import ImpersonateTarget
