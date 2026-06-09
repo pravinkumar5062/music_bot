@@ -63,7 +63,7 @@ def get_state(chat_id: int) -> Dict[str, object]:
 
 def build_ydl_opts(*, download: bool = False) -> dict:
     opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "format": "bestaudio/best",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
@@ -72,11 +72,7 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "socket_timeout": 60,
         "retries": 5,
         "extractor_retries": 5,
-        "extractor_args": {"youtube": {"player_client": ["web", "tv"]}},
     }
-
-    if ImpersonateTarget is not None:
-        opts["impersonate_target"] = ImpersonateTarget("Chrome-131")
 
     return opts
 
@@ -84,15 +80,15 @@ def build_ydl_opts(*, download: bool = False) -> dict:
 async def search_song(query: str) -> Song:
     last_error = None
 
-    for default_search in ("ytsearch", "scsearch"):
+    for search_prefix in ("ytsearch1:", "scsearch1:"):
         ydl_opts = build_ydl_opts(download=False)
-        ydl_opts.update({"default_search": default_search})
+        ydl_opts.update({"extract_flat": False})
 
         loop = asyncio.get_running_loop()
 
         def _extract() -> dict:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(query, download=False)
+                return ydl.extract_info(f"{search_prefix}{query}", download=False)
 
         try:
             info = await loop.run_in_executor(None, _extract)
@@ -101,12 +97,16 @@ async def search_song(query: str) -> Song:
             else:
                 entry = info
 
-            if not entry:
+            if not isinstance(entry, dict) or not entry:
                 raise ValueError("No result found for your query.")
+
+            url = entry.get("url") or entry.get("webpage_url")
+            if not url or str(url).startswith(("ytsearch:", "ytsearch1:", "scsearch:", "scsearch1:")):
+                raise ValueError("Search returned an unusable URL.")
 
             return Song(
                 title=entry.get("title", "Untitled song"),
-                url=entry.get("url") or entry.get("webpage_url"),
+                url=url,
                 duration=int(entry.get("duration", 0) or 0),
                 thumbnail=entry.get("thumbnail", ""),
                 uploader=entry.get("uploader", "Unknown artist"),
