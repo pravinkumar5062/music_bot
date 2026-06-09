@@ -72,6 +72,7 @@ SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME") or "music_bot_group"
 
 GROUP_CALL_CLIENT: Optional[object] = None
 GROUP_CALL_INSTANCE: Optional[object] = None
+BOT_INSTANCE = None
 
 
 @dataclass
@@ -330,6 +331,15 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
             workdir=tempfile.gettempdir(),
         )
         GROUP_CALL_INSTANCE = PyTgCalls(GROUP_CALL_CLIENT)
+        
+        @GROUP_CALL_INSTANCE.on_update()
+        async def stream_update_handler(client, update):
+            from pytgcalls.types import StreamEnded
+            if isinstance(update, StreamEnded):
+                # When a song naturally finishes, automatically trigger play_next
+                chat_id = update.chat_id
+                asyncio.create_task(play_next(chat_id, None, None))
+                
         await GROUP_CALL_INSTANCE.start()
 
     return GROUP_CALL_INSTANCE
@@ -406,7 +416,15 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                 
         # Autoplay if queue is STILL empty (e.g. not repeating)
         if not queue and current_song:
-            status_msg = await update.effective_message.reply_text("✨ *Autoplay:* Fetching next recommended song...", parse_mode="Markdown")
+            try:
+                bot = context.bot if context else BOT_INSTANCE
+                status_msg = await bot.send_message(
+                    chat_id=chat_id, 
+                    text="✨ *Autoplay:* Fetching next recommended song...", 
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                status_msg = None
             try:
                 import re
                 from ytmusicapi import YTMusic
@@ -448,14 +466,16 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             except Exception as e:
                 logging.error(f"Autoplay failed: {e}")
             
-            try:
-                await status_msg.delete()
-            except Exception:
-                pass
+            if status_msg:
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
                 
             if queue:
                 # User requested the 'Playing' message to appear after Autoplay finishes, mimicking the /play command
-                play_msg = await context.bot.send_message(
+                bot = context.bot if context else BOT_INSTANCE
+                play_msg = await bot.send_message(
                     chat_id=chat_id,
                     text="▶️ *Playing next recommended song...*",
                     parse_mode="Markdown"
@@ -472,7 +492,12 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                     await GROUP_CALL_INSTANCE.leave_call(chat_id)
                 except Exception:
                     pass
-            await update.effective_message.reply_text("Queue is empty. Playback stopped. Add songs with /play.")
+            bot = context.bot if context else BOT_INSTANCE
+            if bot:
+                try:
+                    await bot.send_message(chat_id=chat_id, text="⏹ Queue is empty. Playback stopped.")
+                except Exception:
+                    pass
             return
 
         if state.get("shuffle", False) and len(queue) > 1:
@@ -502,7 +527,8 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             dur_s = stream_data.duration % 60
             duration_str = f"0:00 ▷ ─────────── {dur_m}:{dur_s:02d}"
             
-            state["player_message"] = await context.bot.send_message(
+            bot = context.bot if context else BOT_INSTANCE
+            state["player_message"] = await bot.send_message(
                 chat_id=chat_id,
                 text=msg_text,
                 parse_mode="Markdown",
@@ -848,6 +874,8 @@ def main() -> None:
             raise RuntimeError("Another bot instance is already running on this container.") from exc
 
     application = Application.builder().token(TOKEN).build()
+    global BOT_INSTANCE
+    BOT_INSTANCE = application.bot
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("play", play))
