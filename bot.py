@@ -75,8 +75,9 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "extract_flat": False,
         "skip_download": not download,
         "socket_timeout": 60,
-        "retries": 5,
+        "extractor_retries": 5,
         "extractor_args": {"youtube": {"player_client": ["tv", "android", "web"]}},
+        "js_runtimes": ["node"],
     }
 
 
@@ -98,6 +99,8 @@ def build_ydl_opts(*, download: bool = False) -> dict:
             if not hasattr(build_ydl_opts, "temp_cookie_file"):
                 fd, path = tempfile.mkstemp(prefix="yt_cookies_", suffix=".txt", text=True)
                 with os.fdopen(fd, 'w') as f:
+                    if not cookie_text.startswith("# Netscape HTTP Cookie File"):
+                        f.write("# Netscape HTTP Cookie File\n")
                     f.write(cookie_text)
                 build_ydl_opts.temp_cookie_file = path
             opts["cookiefile"] = build_ydl_opts.temp_cookie_file
