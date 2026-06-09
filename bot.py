@@ -274,7 +274,7 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await play_next(update.effective_chat.id, update, context)
     except Exception as exc:
         message = str(exc)
-        if "Sign in to confirm" in message or "DRM protected" in message or "bot" in message.lower():
+        if "sign in to confirm" in message.lower() or "drm protected" in message.lower() or "are you a bot" in message.lower():
             message = (
                 "This song is blocked by YouTube in this environment. "
                 "Please try another track or a direct link from a different source."
