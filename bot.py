@@ -397,11 +397,29 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
 
     if is_previous:
         if not history:
-            await update.effective_message.reply_text("No previous songs in history.")
+            bot = context.bot if context else BOT_INSTANCE
+            if bot:
+                try:
+                    await bot.send_message(chat_id=chat_id, text="No previous songs in history.")
+                except Exception: pass
             return
         if current_song:
             queue.insert(0, current_song)
         next_song = history.pop()
+        
+        # Send previous message
+        bot = context.bot if context else BOT_INSTANCE
+        if bot:
+            try:
+                prev_msg = await bot.send_message(
+                    chat_id=chat_id,
+                    text="⏮ *Switching to previous song...*",
+                    parse_mode="Markdown"
+                )
+                if play_messages is None:
+                    play_messages = []
+                play_messages.append(prev_msg)
+            except Exception: pass
     else:
         if current_song:
             history.append(current_song)
@@ -413,6 +431,21 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                 queue.append(current_song)
             elif repeat == 2:
                 queue.insert(0, current_song)
+                
+            # If it's a manual skip (update is not None) and there are songs in the queue, notify the user
+            if update is not None and queue:
+                bot = context.bot if context else BOT_INSTANCE
+                if bot:
+                    try:
+                        next_msg = await bot.send_message(
+                            chat_id=chat_id,
+                            text="⏭ *Switching to next song...*",
+                            parse_mode="Markdown"
+                        )
+                        if play_messages is None:
+                            play_messages = []
+                        play_messages.append(next_msg)
+                    except Exception: pass
                 
         # Autoplay if queue is STILL empty (e.g. not repeating)
         if not queue and current_song:
@@ -592,36 +625,17 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             pass
             
         state = get_state(update.effective_chat.id)
-        state["queue"].append(song)
         
-        queue_msg = await context.bot.send_message(
+        # User requested that /play ALWAYS interrupts the current song and plays immediately
+        state["queue"].insert(0, song)
+        
+        play_msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=(
-                f"✅ *Added to Queue*\n"
-                f"━━━━━━━━━━━━━━━\n"
-                f"🎵 *Track:* {escape_md(song.title)}\n"
-                f"👤 *Artist:* {escape_md(song.uploader)}\n"
-                f"⏱ *Duration:* {song.duration // 60}m {song.duration % 60}s"
-            ),
+            text="▶️ *Playing your searched song...*", 
             parse_mode="Markdown"
         )
-
-        if not state["playing"]:
-            # Delete the queue message in the background after 5 seconds so the user has time to read it
-            async def _delete_later(msg):
-                await asyncio.sleep(5)
-                try:
-                    await msg.delete()
-                except Exception:
-                    pass
-            asyncio.create_task(_delete_later(queue_msg))
-            
-            play_msg = await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="▶️ *Playing your searched song...*", 
-                parse_mode="Markdown"
-            )
-            await play_next(update.effective_chat.id, update, context, play_messages=[play_msg])
+        
+        await play_next(update.effective_chat.id, update, context, play_messages=[play_msg])
     except Exception as exc:
         message = str(exc)
         if "sign in to confirm" in message.lower() or "drm protected" in message.lower() or "are you a bot" in message.lower():
