@@ -25,10 +25,14 @@ except Exception:  # pragma: no cover - fallback for older yt-dlp builds
 
 load_dotenv()
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-API_ID = int(os.getenv("TELEGRAM_API_ID", "0") or 0)
-API_HASH = os.getenv("TELEGRAM_API_HASH", "")
-SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME", "music_bot_group")
+TOKEN = (
+    os.getenv("TELEGRAM_BOT_TOKEN")
+    or os.getenv("BOT_TOKEN")
+    or os.getenv("TOKEN")
+)
+API_ID = int(os.getenv("TELEGRAM_API_ID") or os.getenv("API_ID") or 0)
+API_HASH = os.getenv("TELEGRAM_API_HASH") or os.getenv("API_HASH") or ""
+SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME") or "music_bot_group"
 
 GROUP_CALL_CLIENT: Optional[object] = None
 GROUP_CALL_INSTANCE: Optional[object] = None
@@ -325,7 +329,9 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def main() -> None:
     if not TOKEN:
-        raise RuntimeError("Set TELEGRAM_BOT_TOKEN in your environment or .env file.")
+        raise RuntimeError(
+            "Set TELEGRAM_BOT_TOKEN (or BOT_TOKEN/TOKEN) in your environment or .env file."
+        )
 
     application = Application.builder().token(TOKEN).build()
 
