@@ -265,9 +265,9 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
             await asyncio.sleep(3)
             try:
                 await group_call.unmute(chat_id)
-                print(f"[WebRTC] 🎤 Explicitly sent UNMUTE request for {chat_id}")
+                logging.info(f"[WebRTC] 🎤 Explicitly sent UNMUTE request for {chat_id}")
             except Exception as e:
-                print(f"[WebRTC] ⚠️ Failed to unmute: {e}")
+                logging.error(f"[WebRTC] ⚠️ Failed to unmute: {e}")
                 
         asyncio.create_task(delayed_unmute())
             
