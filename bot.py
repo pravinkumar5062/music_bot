@@ -204,52 +204,74 @@ def build_ydl_opts(*, download: bool = False) -> dict:
 
 
 async def search_song(query: str) -> Song:
-    last_error = None
-
-    for search_prefix in ("ytsearch1:", "scsearch1:"):
+    # If direct URL, fallback to yt-dlp to extract metadata
+    if query.startswith("http://") or query.startswith("https://"):
         ydl_opts = build_ydl_opts(download=False)
         ydl_opts.update({"extract_flat": True})
-
         loop = asyncio.get_running_loop()
-
         def _extract() -> dict:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"{search_prefix}{query}", download=False)
+                return ydl.extract_info(query, download=False)
+        info = await loop.run_in_executor(None, _extract)
+        if isinstance(info, dict) and "entries" in info and info["entries"]:
+            entry = info["entries"][0]
+        else:
+            entry = info
+            
+        url = entry.get("url") or entry.get("webpage_url") or query
+        return Song(
+            title=entry.get("title", "Untitled song"),
+            url=url,
+            duration=int(entry.get("duration", 0) or 0),
+            thumbnail=entry.get("thumbnail", ""),
+            uploader=entry.get("uploader", "Unknown artist"),
+        )
+        
+    # Extremely fast search via ytmusicapi JSON API
+    try:
+        from ytmusicapi import YTMusic
+        ytm = YTMusic()
+        loop = asyncio.get_running_loop()
+        results = await loop.run_in_executor(None, lambda: ytm.search(query, filter="songs", limit=1))
+        if not results:
+            results = await loop.run_in_executor(None, lambda: ytm.search(query, limit=1))
+            
+        if results:
+            entry = results[0]
+            video_id = entry.get("videoId")
+            if video_id:
+                thumb = entry.get("thumbnails", [{"url": ""}])
+                thumb_url = thumb[-1]["url"] if isinstance(thumb, list) and len(thumb) > 0 else ""
+                
+                duration = 0
+                length_str = entry.get("duration")
+                if length_str and ":" in length_str:
+                    parts = length_str.split(":")
+                    if len(parts) == 2:
+                        duration = int(parts[0]) * 60 + int(parts[1])
+                    elif len(parts) == 3:
+                        duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
 
-        try:
-            info = await loop.run_in_executor(None, _extract)
-            if isinstance(info, dict) and "entries" in info and info["entries"]:
-                entry = info["entries"][0]
-            else:
-                entry = info
-
-            if not isinstance(entry, dict) or not entry:
-                raise ValueError("No result found for your query.")
-
-            url = entry.get("url") or entry.get("webpage_url")
-            if not url or str(url).startswith(("ytsearch:", "ytsearch1:", "scsearch:", "scsearch1:")):
-                raise ValueError("Search returned an unusable URL.")
-
-            return Song(
-                title=entry.get("title", "Untitled song"),
-                url=url,
-                duration=int(entry.get("duration", 0) or 0),
-                thumbnail=entry.get("thumbnail", ""),
-                uploader=entry.get("uploader", "Unknown artist"),
-            )
-        except Exception as exc:
-            last_error = exc
-
-    raise RuntimeError(
-        "YouTube and SoundCloud search both failed. Try a different song title or a direct link. "
-        f"Last error: {last_error}"
-    )
+                return Song(
+                    title=entry.get("title", "Untitled song"),
+                    url=f"https://www.youtube.com/watch?v={video_id}",
+                    duration=duration,
+                    thumbnail=thumb_url,
+                    uploader=", ".join([a.get("name", "") for a in entry.get("artists", [])]),
+                )
+    except Exception as e:
+        logging.error(f"ytmusicapi search failed: {e}")
+        
+    raise RuntimeError("Failed to find any matching songs.")
 
 
 async def get_stream_url(song: Song) -> Song:
     ydl_opts = build_ydl_opts(download=False)
     ydl_opts.update({
         "extract_flat": False,
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "youtube_include_dash_manifest": False,
+        "youtube_include_hls_manifest": False,
     })
 
     loop = asyncio.get_running_loop()
@@ -367,14 +389,13 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                     video_id = match.group(1)
                     ytm = YTMusic()
                     # Run in executor to prevent blocking the async loop
-                    watch_playlist = await asyncio.to_thread(ytm.get_watch_playlist, videoId=video_id)
+                    watch_playlist = await asyncio.to_thread(ytm.get_watch_playlist, videoId=video_id, radio=True, limit=10)
                     tracks = watch_playlist.get("tracks", [])
                     
-                    next_track = None
-                    for t in tracks:
-                        if t.get("videoId") != video_id:
-                            next_track = t
-                            break
+                    import random
+                    # Pick a random track from the top 10 recommended to guarantee variety
+                    valid_tracks = [t for t in tracks[:10] if t.get("videoId") != video_id]
+                    next_track = random.choice(valid_tracks) if valid_tracks else None
                             
                     if next_track:
                         thumb = next_track.get("thumbnail")
