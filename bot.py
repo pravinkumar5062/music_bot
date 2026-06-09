@@ -129,19 +129,19 @@ def get_player_keyboard(state: Dict[str, object] = None, duration_str: str = "0:
             InlineKeyboardButton(duration_str, callback_data="ignore")
         ],
         [
-            InlineKeyboardButton("◁◁ Rewind", callback_data="btn_prev"),
+            InlineKeyboardButton("⏮ Previous", callback_data="btn_prev", style="primary"),
             play_pause_btn,
-            InlineKeyboardButton("▷▷ Seek", callback_data="ignore")
+            InlineKeyboardButton("⏭ Next", callback_data="btn_skip", style="primary")
         ],
         [
-            InlineKeyboardButton(shuffle_text, callback_data="btn_shuffle"),
-            InlineKeyboardButton("▷▷| Skip", callback_data="btn_skip"),
-            InlineKeyboardButton("🔁 Replay", callback_data="btn_replay")
+            InlineKeyboardButton(shuffle_text, callback_data="btn_shuffle", style="primary"),
+            InlineKeyboardButton("⏩ Seek", callback_data="ignore", style="secondary"),
+            InlineKeyboardButton("🔁 Replay", callback_data="ignore", style="secondary")
         ],
         [
-            InlineKeyboardButton("🔉 Volume", callback_data="btn_volume"),
-            InlineKeyboardButton(repeat_text, callback_data="btn_repeat"),
-            InlineKeyboardButton("✨ Effects", callback_data="btn_effects")
+            InlineKeyboardButton("🔉 Volume", callback_data="btn_volume", style="secondary"),
+            InlineKeyboardButton(repeat_text, callback_data="btn_repeat", style="primary"),
+            InlineKeyboardButton("✨ Effects", callback_data="btn_effects", style="secondary")
         ],
         [
             InlineKeyboardButton("❌ Close", callback_data="btn_close", style="danger")
