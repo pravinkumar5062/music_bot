@@ -345,17 +345,6 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
             queue.insert(0, current_song)
         next_song = history.pop()
     else:
-        if not queue:
-            state["playing"] = False
-            state["current"] = None
-            if GROUP_CALL_INSTANCE:
-                try:
-                    await GROUP_CALL_INSTANCE.leave_call(chat_id)
-                except Exception:
-                    pass
-            await update.effective_message.reply_text("Queue is empty. Playback stopped. Add songs with /play.")
-            return
-
         if current_song:
             history.append(current_song)
             if len(history) > 50:
@@ -366,6 +355,51 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
                 queue.append(current_song)
             elif repeat == 2:
                 queue.insert(0, current_song)
+                
+        # Autoplay if queue is STILL empty (e.g. not repeating)
+        if not queue and current_song and ("youtube.com" in current_song.url or "youtu.be" in current_song.url):
+            import re
+            match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", current_song.url)
+            if match:
+                video_id = match.group(1)
+                mix_url = f"https://www.youtube.com/watch?v={video_id}&list=RD{video_id}"
+                try:
+                    loop = asyncio.get_running_loop()
+                    def _extract_mix():
+                        ydl_opts = build_ydl_opts(download=False)
+                        ydl_opts.update({"extract_flat": True, "playlist_items": "2"})
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = ydl.extract_info(mix_url, download=False)
+                            if "entries" in info and len(info["entries"]) > 1:
+                                return info["entries"][1]
+                            return None
+                    
+                    entry = await loop.run_in_executor(None, _extract_mix)
+                    if entry:
+                        next_url = entry.get("url") or entry.get("webpage_url")
+                        if next_url:
+                            auto_song = Song(
+                                title=entry.get("title", "Untitled song"),
+                                url=next_url,
+                                duration=int(entry.get("duration", 0) or 0),
+                                thumbnail=entry.get("thumbnail", ""),
+                                uploader=entry.get("uploader", "Autoplay"),
+                                requested_by="🤖 Autoplay"
+                            )
+                            queue.append(auto_song)
+                except Exception as e:
+                    logging.error(f"Autoplay failed: {e}")
+
+        if not queue:
+            state["playing"] = False
+            state["current"] = None
+            if GROUP_CALL_INSTANCE:
+                try:
+                    await GROUP_CALL_INSTANCE.leave_call(chat_id)
+                except Exception:
+                    pass
+            await update.effective_message.reply_text("Queue is empty. Playback stopped. Add songs with /play.")
+            return
 
         if state.get("shuffle", False) and len(queue) > 1:
             import random
