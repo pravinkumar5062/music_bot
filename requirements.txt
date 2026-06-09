@@ -5,4 +5,4 @@ curl_cffi<0.15,>=0.10
 pyrogram>=2.0.106
 py-tgcalls>=2.3.0
 tgcrypto>=1.2.0
-nodejs-bin>=18.4.0
+nodejs-bin==18.4.0a4
