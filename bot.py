@@ -158,23 +158,25 @@ async def search_song(query: str) -> Song:
 
 
 async def get_stream_url(song: Song) -> Song:
-    ydl_opts = build_ydl_opts(download=False)
+    # We must download the file locally. Passing direct YouTube URLs to FFmpeg 
+    # results in 403 Forbidden and silent playback because FFmpeg lacks the Chrome impersonation headers.
+    file_id = "".join(x for x in song.title if x.isalnum())[:20]
+    out_file = os.path.join(tempfile.gettempdir(), f"{file_id}.%(ext)s")
+
+    ydl_opts = build_ydl_opts(download=True)
     ydl_opts.update({
         "extract_flat": False,
+        "outtmpl": out_file,
     })
 
     loop = asyncio.get_running_loop()
 
-    def _extract() -> dict:
+    def _extract() -> str:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(song.url, download=False)
+            info = ydl.extract_info(song.url, download=True)
+            return ydl.prepare_filename(info)
 
-    info = await loop.run_in_executor(None, _extract)
-    
-    if not info.get("url"):
-        raise ValueError("Could not extract a valid stream URL.")
-        
-    song.file_path = info["url"]
+    song.file_path = await loop.run_in_executor(None, _extract)
     return song
 
 
