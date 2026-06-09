@@ -6,6 +6,26 @@ except RuntimeError:
 import os
 import tempfile
 import logging
+from collections import deque
+
+# Custom logger to store the last 50 logs in memory so we can view them on Render
+log_history = deque(maxlen=50)
+
+class MemoryHandler(logging.Handler):
+    def emit(self, record):
+        log_history.append(self.format(record))
+
+# Configure logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+# Enable DEBUG logging for PyTgCalls to catch WebRTC/FFmpeg errors
+logging.getLogger("pytgcalls").setLevel(logging.DEBUG)
+
+memory_handler = MemoryHandler()
+memory_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+logging.getLogger().addHandler(memory_handler)
+logging.getLogger("pytgcalls").addHandler(memory_handler)
 
 try:
     import imageio_ffmpeg
@@ -438,6 +458,7 @@ def main() -> None:
     application.add_handler(CommandHandler("now", now_playing))
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("help", help_cmd))
+    application.add_handler(CommandHandler("diagnostics", diagnostics_cmd))
 
     try:
         if webhook_url:
