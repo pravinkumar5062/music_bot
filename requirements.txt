@@ -3,5 +3,5 @@ yt-dlp[default]>=2024.12.13
 python-dotenv>=1.0.0
 curl_cffi<0.15,>=0.10
 pyrogram>=2.0.106
-pytgcalls[pyrogram]>=2.1.0
+py-tgcalls>=2.3.0
 tgcrypto>=1.2.0

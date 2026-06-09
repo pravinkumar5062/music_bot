@@ -11,10 +11,12 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 try:
     from pyrogram import Client as PyrogramClient
-    from pytgcalls import GroupCallFactory
+    from pytgcalls import PyTgCalls
+    from pytgcalls.types import MediaStream
 except Exception:  # pragma: no cover - optional group-call dependencies
     PyrogramClient = None
-    GroupCallFactory = None
+    PyTgCalls = None
+    MediaStream = None
 
 try:
     from yt_dlp.networking.impersonate import ImpersonateTarget
@@ -153,7 +155,7 @@ async def download_song(song: Song) -> Song:
 async def _start_group_call(chat_id: int) -> Optional[object]:
     global GROUP_CALL_CLIENT, GROUP_CALL_INSTANCE
 
-    if PyrogramClient is None or GroupCallFactory is None or not API_ID or not API_HASH:
+    if PyrogramClient is None or PyTgCalls is None or MediaStream is None or not API_ID or not API_HASH:
         return None
 
     if GROUP_CALL_CLIENT is None:
@@ -163,18 +165,8 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
             api_hash=API_HASH,
             workdir=tempfile.gettempdir(),
         )
-        await GROUP_CALL_CLIENT.start()
-
-    if GROUP_CALL_INSTANCE is None:
-        GROUP_CALL_INSTANCE = GroupCallFactory(GROUP_CALL_CLIENT).get_file_group_call("input.raw")
-
-    try:
-        if hasattr(GROUP_CALL_INSTANCE, "is_connected") and not GROUP_CALL_INSTANCE.is_connected:
-            await GROUP_CALL_INSTANCE.start(chat_id)
-        elif not hasattr(GROUP_CALL_INSTANCE, "is_connected"):
-            await GROUP_CALL_INSTANCE.start(chat_id)
-    except Exception:
-        pass
+        GROUP_CALL_INSTANCE = PyTgCalls(GROUP_CALL_CLIENT)
+        await GROUP_CALL_INSTANCE.start()
 
     return GROUP_CALL_INSTANCE
 
@@ -185,13 +177,13 @@ async def _play_in_group(chat_id: int, file_path: str) -> bool:
         return False
 
     try:
-        if hasattr(group_call, "play"):
-            await group_call.play(file_path)
-            return True
+        await group_call.play(
+            chat_id,
+            MediaStream(file_path, video_flags=MediaStream.Flags.IGNORE),
+        )
+        return True
     except Exception:
         return False
-
-    return False
 
 
 async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
