@@ -9,3 +9,5 @@ nodejs-bin==18.4.0a4
 imageio-ffmpeg>=0.4.9
 
 ytmusicapi==1.12.1
+
+pytubefix==10.9.0

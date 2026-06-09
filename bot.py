@@ -266,6 +266,27 @@ async def search_song(query: str) -> Song:
 
 
 async def get_stream_url(song: Song) -> Song:
+    # First, attempt to use ultra-fast pytubefix for YouTube URLs
+    if "youtube.com" in song.url or "youtu.be" in song.url:
+        try:
+            loop = asyncio.get_running_loop()
+            def _extract_pytube():
+                from pytubefix import YouTube
+                yt = YouTube(song.url, use_oauth=False, allow_oauth_cache=False)
+                audio_streams = yt.streams.filter(only_audio=True)
+                audio = audio_streams.order_by('abr').desc().first()
+                if audio and audio.url:
+                    return audio.url
+                return None
+            
+            stream_url = await loop.run_in_executor(None, _extract_pytube)
+            if stream_url:
+                song.file_path = stream_url
+                return song
+        except Exception as e:
+            logging.error(f"Pytubefix failed, falling back to yt-dlp: {e}")
+
+    # Fallback to yt-dlp
     ydl_opts = build_ydl_opts(download=False)
     ydl_opts.update({
         "extract_flat": False,
