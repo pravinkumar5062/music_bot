@@ -1,4 +1,4 @@
-# Advanced Telegram Music Bot
+# music_bot
 
 A simple Telegram music bot that can:
 - search and queue songs with /play
@@ -10,9 +10,9 @@ A simple Telegram music bot that can:
 ## Setup
 
 1. Create a Telegram bot with BotFather and copy its token.
-2. Create a .env file from .env.example:
-   cp .env.example .env
-3. Put your token in .env.
+2. Create a local .env file and add your token:
+   TELEGRAM_BOT_TOKEN=your_token_here
+3. Keep the .env file local; Render will provide the token in production.
 4. Install dependencies:
    pip install -r requirements.txt
 5. Run the bot:
