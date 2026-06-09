@@ -62,32 +62,41 @@ def build_ydl_opts(*, download: bool = False) -> dict:
 
 
 async def search_song(query: str) -> Song:
-    ydl_opts = build_ydl_opts(download=False)
-    ydl_opts.update({
-        "default_search": "ytsearch",
-    })
+    last_error = None
 
-    loop = asyncio.get_running_loop()
+    for default_search in ("ytsearch", "scsearch"):
+        ydl_opts = build_ydl_opts(download=False)
+        ydl_opts.update({"default_search": default_search})
 
-    def _extract() -> dict:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(query, download=False)
+        loop = asyncio.get_running_loop()
 
-    info = await loop.run_in_executor(None, _extract)
-    if "entries" in info and info["entries"]:
-        entry = info["entries"][0]
-    else:
-        entry = info
+        def _extract() -> dict:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(query, download=False)
 
-    if not entry:
-        raise ValueError("No result found for your query.")
+        try:
+            info = await loop.run_in_executor(None, _extract)
+            if isinstance(info, dict) and "entries" in info and info["entries"]:
+                entry = info["entries"][0]
+            else:
+                entry = info
 
-    return Song(
-        title=entry.get("title", "Untitled song"),
-        url=entry.get("url") or entry.get("webpage_url"),
-        duration=int(entry.get("duration", 0) or 0),
-        thumbnail=entry.get("thumbnail", ""),
-        uploader=entry.get("uploader", "Unknown artist"),
+            if not entry:
+                raise ValueError("No result found for your query.")
+
+            return Song(
+                title=entry.get("title", "Untitled song"),
+                url=entry.get("url") or entry.get("webpage_url"),
+                duration=int(entry.get("duration", 0) or 0),
+                thumbnail=entry.get("thumbnail", ""),
+                uploader=entry.get("uploader", "Unknown artist"),
+            )
+        except Exception as exc:
+            last_error = exc
+
+    raise RuntimeError(
+        "YouTube and SoundCloud search both failed. Try a different song title or a direct link. "
+        f"Last error: {last_error}"
     )
 
 
@@ -190,7 +199,13 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not state["playing"]:
             await play_next(update.effective_chat.id, update, context)
     except Exception as exc:
-        await update.message.reply_text(f"Unable to load song: {exc}")
+        message = str(exc)
+        if "Sign in to confirm" in message or "DRM protected" in message or "bot" in message.lower():
+            message = (
+                "This song is blocked by YouTube in this environment. "
+                "Please try another track or a direct link from a different source."
+            )
+        await update.message.reply_text(f"Unable to load song: {message}")
 
 
 async def queue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
