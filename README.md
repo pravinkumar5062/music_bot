@@ -19,5 +19,6 @@ A simple Telegram music bot that can:
    python bot.py
 
 ## Notes
-- This version downloads the audio file from YouTube and sends it back to the chat.
-- For a production-grade voice chat experience, you would need a full audio streaming setup with Telegram voice chat support.
+- The bot now tries to play tracks in a Telegram voice chat when the group-call stack is available.
+- If the voice-chat stack is not installed or cannot join the chat, it falls back to sending the audio file back to the chat.
+- On Render, install the updated dependencies from requirements.txt and set TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_BOT_TOKEN in the environment.

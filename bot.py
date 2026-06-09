@@ -2,12 +2,19 @@ import asyncio
 import os
 import tempfile
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import yt_dlp
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+
+try:
+    from pyrogram import Client as PyrogramClient
+    from pytgcalls import GroupCallFactory
+except Exception:  # pragma: no cover - optional group-call dependencies
+    PyrogramClient = None
+    GroupCallFactory = None
 
 try:
     from yt_dlp.networking.impersonate import ImpersonateTarget
@@ -17,6 +24,12 @@ except Exception:  # pragma: no cover - fallback for older yt-dlp builds
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+API_ID = int(os.getenv("TELEGRAM_API_ID", "0") or 0)
+API_HASH = os.getenv("TELEGRAM_API_HASH", "")
+SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME", "music_bot_group")
+
+GROUP_CALL_CLIENT: Optional[object] = None
+GROUP_CALL_INSTANCE: Optional[object] = None
 
 
 @dataclass
@@ -137,6 +150,50 @@ async def download_song(song: Song) -> Song:
     return song
 
 
+async def _start_group_call(chat_id: int) -> Optional[object]:
+    global GROUP_CALL_CLIENT, GROUP_CALL_INSTANCE
+
+    if PyrogramClient is None or GroupCallFactory is None or not API_ID or not API_HASH:
+        return None
+
+    if GROUP_CALL_CLIENT is None:
+        GROUP_CALL_CLIENT = PyrogramClient(
+            SESSION_NAME,
+            api_id=API_ID,
+            api_hash=API_HASH,
+            workdir=tempfile.gettempdir(),
+        )
+        await GROUP_CALL_CLIENT.start()
+
+    if GROUP_CALL_INSTANCE is None:
+        GROUP_CALL_INSTANCE = GroupCallFactory(GROUP_CALL_CLIENT).get_file_group_call("input.raw")
+
+    try:
+        if hasattr(GROUP_CALL_INSTANCE, "is_connected") and not GROUP_CALL_INSTANCE.is_connected:
+            await GROUP_CALL_INSTANCE.start(chat_id)
+        elif not hasattr(GROUP_CALL_INSTANCE, "is_connected"):
+            await GROUP_CALL_INSTANCE.start(chat_id)
+    except Exception:
+        pass
+
+    return GROUP_CALL_INSTANCE
+
+
+async def _play_in_group(chat_id: int, file_path: str) -> bool:
+    group_call = await _start_group_call(chat_id)
+    if group_call is None:
+        return False
+
+    try:
+        if hasattr(group_call, "play"):
+            await group_call.play(file_path)
+            return True
+    except Exception:
+        return False
+
+    return False
+
+
 async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = get_state(chat_id)
     queue: List[Song] = state["queue"]
@@ -153,13 +210,19 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
 
     try:
         downloaded = await download_song(current)
-        await update.effective_message.reply_audio(
-            audio=downloaded.file_path,
-            title=downloaded.title,
-            performer=downloaded.uploader,
-            duration=downloaded.duration,
-            caption=f"Now playing: {downloaded.title}",
-        )
+
+        if await _play_in_group(chat_id, downloaded.file_path):
+            await update.effective_message.reply_text(
+                f"🎧 Playing in voice chat: {downloaded.title}"
+            )
+        else:
+            await update.effective_message.reply_audio(
+                audio=downloaded.file_path,
+                title=downloaded.title,
+                performer=downloaded.uploader,
+                duration=downloaded.duration,
+                caption=f"Now playing: {downloaded.title}",
+            )
     except Exception as exc:
         await update.effective_message.reply_text(f"Playback failed: {exc}")
         state["playing"] = False
