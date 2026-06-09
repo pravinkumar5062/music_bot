@@ -69,8 +69,9 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "no_warnings": True,
         "extract_flat": False,
         "skip_download": not download,
-        "socket_timeout": 30,
-        "retries": 2,
+        "socket_timeout": 60,
+        "retries": 5,
+        "extractor_retries": 5,
         "extractor_args": {"youtube": {"player_client": ["web", "tv"]}},
     }
 
@@ -121,18 +122,15 @@ async def search_song(query: str) -> Song:
 
 async def download_song(song: Song) -> Song:
     temp_dir = tempfile.gettempdir()
-    outtmpl = os.path.join(temp_dir, f"music_{song.url.split('=')[-1] if '=' in song.url else 'track'}.%(ext)s")
+    outtmpl = os.path.join(temp_dir, f"music_{abs(hash(song.url))}.%(ext)s")
 
     ydl_opts = build_ydl_opts(download=True)
     ydl_opts.update({
         "outtmpl": outtmpl,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "0",
-            }
-        ],
+        "postprocessors": [],
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "prefer_ffmpeg": True,
     })
 
     loop = asyncio.get_running_loop()
@@ -144,8 +142,9 @@ async def download_song(song: Song) -> Song:
     await loop.run_in_executor(None, _download)
 
     candidate = None
-    for file_name in os.listdir(temp_dir):
-        if file_name.startswith("music_") and file_name.endswith(".mp3"):
+    audio_exts = (".mp3", ".m4a", ".webm", ".ogg", ".opus", ".wav")
+    for file_name in sorted(os.listdir(temp_dir), key=lambda name: os.path.getmtime(os.path.join(temp_dir, name)), reverse=True):
+        if file_name.startswith("music_") and file_name.lower().endswith(audio_exts):
             candidate = os.path.join(temp_dir, file_name)
             break
 
