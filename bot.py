@@ -373,7 +373,7 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
         raise RuntimeError(f"PyTgCalls error: {e}")
 
 
-async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE, is_previous: bool = False) -> None:
+async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_TYPE, is_previous: bool = False, play_messages=None) -> None:
     state = get_state(chat_id)
     queue: List[Song] = state["queue"]
     history: List[Song] = state.setdefault("history", [])
@@ -475,15 +475,23 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
         if await _play_in_group(chat_id, stream_data):
             msg_text = (
                 f"🎵 *Music Playlist:*\n\n"
-                f"1. 🎸 {escape_md(stream_data.title)} — {escape_md(stream_data.uploader)}\n"
-                f"🏆 *Requested by:* {escape_md(stream_data.requested_by)}\n\n"
-                f"⏱ {stream_data.duration // 60}:{stream_data.duration % 60:02d} ▷ ───────────"
+                f"1. 🎸 **{escape_md(stream_data.title)}** — **{escape_md(stream_data.uploader)}**\n"
+                f"🏆 *Requested by:* **{escape_md(stream_data.requested_by)}**\n\n"
+                f"                      ⏱ {stream_data.duration // 60}:{stream_data.duration % 60:02d} ▷ ───────────"
             )
-            state["player_message"] = await update.effective_message.reply_text(
-                msg_text,
+            state["player_message"] = await context.bot.send_message(
+                chat_id=chat_id,
+                text=msg_text,
                 parse_mode="Markdown",
                 reply_markup=get_player_keyboard(state)
             )
+            
+            if play_messages:
+                for m in play_messages:
+                    try:
+                        await m.delete()
+                    except Exception:
+                        pass
             
             # No local files to delete since we are directly streaming!
             
@@ -496,8 +504,7 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
         state["playing"] = False
         return
 
-    if queue:
-        await update.effective_message.reply_text(f"Queued {len(queue)} more song(s).")
+
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -520,12 +527,14 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /play <song name or YouTube URL>")
         return
 
+    status_msg = await update.message.reply_text("🔎 *Searching for your song, please wait...*", parse_mode="Markdown")
+
     try:
         song = await search_song(query)
         song.requested_by = update.effective_user.first_name if update.effective_user else "Unknown"
         state = get_state(update.effective_chat.id)
         state["queue"].append(song)
-        await update.message.reply_text(
+        queue_msg = await update.message.reply_text(
             f"✅ *Added to Queue*\n"
             f"━━━━━━━━━━━━━━━\n"
             f"🎵 *Track:* {escape_md(song.title)}\n"
@@ -535,7 +544,12 @@ async def play(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
         if not state["playing"]:
-            await play_next(update.effective_chat.id, update, context)
+            await play_next(update.effective_chat.id, update, context, play_messages=[status_msg, queue_msg])
+        else:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
     except Exception as exc:
         message = str(exc)
         if "sign in to confirm" in message.lower() or "drm protected" in message.lower() or "are you a bot" in message.lower():
@@ -650,9 +664,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if data == "cmd_play":
         from telegram import ForceReply
         await query.message.reply_text(
-            "🎵 *What do you want to play?*\n\n✨ _Type the name of the song or send a YouTube link below:_",
+            "🎵 *What do you want to play?*\n\n✨ _Just type the song name below!_",
             parse_mode="Markdown",
-            reply_markup=ForceReply(selective=True)
+            reply_markup=ForceReply(selective=True, input_field_placeholder="Type song name here...")
         )
         return
     elif data == "cmd_queue":
