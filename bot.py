@@ -360,33 +360,41 @@ async def play_next(chat_id: int, update: Update, context: ContextTypes.DEFAULT_
         if not queue and current_song:
             status_msg = await update.effective_message.reply_text("✨ *Autoplay:* Fetching next recommended song...", parse_mode="Markdown")
             try:
-                loop = asyncio.get_running_loop()
-                def _extract_auto():
-                    ydl_opts = build_ydl_opts(download=False)
-                    ydl_opts.update({"extract_flat": True})
-                    uploader = current_song.uploader.replace(" - Topic", "").strip()
-                    search_query = f"ytsearch10:{uploader} track"
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(search_query, download=False)
-                        entries = info.get("entries", [])
-                        for e in entries:
-                            duration = e.get("duration", 0) or 0
-                            url = e.get("url", "")
-                            # Avoid playlists/long mixes (duration > 600s) and the exact same song
-                            if url and url != current_song.url and 0 < duration < 600:
-                                return e
-                        return None
-                
-                entry = await loop.run_in_executor(None, _extract_auto)
-                if entry:
-                    next_url = entry.get("url") or entry.get("webpage_url")
-                    if next_url:
+                import re
+                from ytmusicapi import YTMusic
+                match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", current_song.url)
+                if match:
+                    video_id = match.group(1)
+                    ytm = YTMusic()
+                    # Run in executor to prevent blocking the async loop
+                    watch_playlist = await asyncio.to_thread(ytm.get_watch_playlist, videoId=video_id)
+                    tracks = watch_playlist.get("tracks", [])
+                    
+                    next_track = None
+                    for t in tracks:
+                        if t.get("videoId") != video_id:
+                            next_track = t
+                            break
+                            
+                    if next_track:
+                        thumb = next_track.get("thumbnail")
+                        thumb_url = thumb[0]["url"] if isinstance(thumb, list) and len(thumb) > 0 else ""
+                        
+                        duration = 0
+                        length_str = next_track.get("length")
+                        if length_str and ":" in length_str:
+                            parts = length_str.split(":")
+                            if len(parts) == 2:
+                                duration = int(parts[0]) * 60 + int(parts[1])
+                            elif len(parts) == 3:
+                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                                
                         auto_song = Song(
-                            title=entry.get("title", "Untitled song"),
-                            url=next_url,
-                            duration=int(entry.get("duration", 0) or 0),
-                            thumbnail=entry.get("thumbnail", ""),
-                            uploader=entry.get("uploader", "Autoplay"),
+                            title=next_track.get("title", "Untitled"),
+                            url=f"https://www.youtube.com/watch?v={next_track.get('videoId')}",
+                            duration=duration,
+                            thumbnail=thumb_url,
+                            uploader=", ".join([a.get("name", "") for a in next_track.get("artists", [])]),
                             requested_by="🤖 Autoplay"
                         )
                         queue.append(auto_song)
