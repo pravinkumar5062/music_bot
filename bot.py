@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+try:
+    from yt_dlp.networking.impersonate import ImpersonateTarget
+except Exception:  # pragma: no cover - fallback for older yt-dlp builds
+    ImpersonateTarget = None
+
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -37,16 +42,30 @@ def get_state(chat_id: int) -> Dict[str, object]:
     return CHAT_STATES[chat_id]
 
 
-async def search_song(query: str) -> Song:
-    ydl_opts = {
-        "format": "bestaudio/best",
+def build_ydl_opts(*, download: bool = False) -> dict:
+    opts = {
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "default_search": "ytsearch",
         "extract_flat": False,
-        "skip_download": True,
+        "skip_download": not download,
+        "socket_timeout": 30,
+        "retries": 2,
+        "extractor_args": {"youtube": {"player_client": ["web", "tv"]}},
     }
+
+    if ImpersonateTarget is not None:
+        opts["impersonate_target"] = ImpersonateTarget("Chrome-131")
+
+    return opts
+
+
+async def search_song(query: str) -> Song:
+    ydl_opts = build_ydl_opts(download=False)
+    ydl_opts.update({
+        "default_search": "ytsearch",
+    })
 
     loop = asyncio.get_running_loop()
 
@@ -76,12 +95,9 @@ async def download_song(song: Song) -> Song:
     temp_dir = tempfile.gettempdir()
     outtmpl = os.path.join(temp_dir, f"music_{song.url.split('=')[-1] if '=' in song.url else 'track'}.%(ext)s")
 
-    ydl_opts = {
-        "format": "bestaudio/best",
+    ydl_opts = build_ydl_opts(download=True)
+    ydl_opts.update({
         "outtmpl": outtmpl,
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -89,7 +105,7 @@ async def download_song(song: Song) -> Song:
                 "preferredquality": "0",
             }
         ],
-    }
+    })
 
     loop = asyncio.get_running_loop()
 
