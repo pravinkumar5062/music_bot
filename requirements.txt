@@ -6,3 +6,4 @@ pyrogram>=2.0.106
 py-tgcalls>=2.3.0
 tgcrypto>=1.2.0
 nodejs-bin==18.4.0a4
+imageio-ffmpeg>=0.4.9

@@ -5,6 +5,13 @@ except RuntimeError:
     asyncio.set_event_loop(asyncio.new_event_loop())
 import os
 import tempfile
+import logging
+
+try:
+    import imageio_ffmpeg
+    os.environ["PATH"] += os.pathsep + os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
+except ImportError:
+    pass
 
 try:
     import fcntl
