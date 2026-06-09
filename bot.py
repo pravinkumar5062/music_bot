@@ -228,15 +228,6 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
             workdir=tempfile.gettempdir(),
         )
         GROUP_CALL_INSTANCE = PyTgCalls(GROUP_CALL_CLIENT)
-            
-        @GROUP_CALL_INSTANCE.on_network_status_changed()
-        async def on_network_status_changed(client, chat_id, status):
-            from pytgcalls.types import NetworkStatus
-            if status == NetworkStatus.CONNECTED:
-                print(f"[WebRTC] ✅ Successfully connected to Telegram voice server for chat {chat_id}!")
-            else:
-                print(f"[WebRTC] ⚠️ Network status changed for chat {chat_id}: {status}")
-
         await GROUP_CALL_INSTANCE.start()
 
     return GROUP_CALL_INSTANCE
