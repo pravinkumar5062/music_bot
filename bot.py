@@ -185,10 +185,15 @@ async def _start_group_call(chat_id: int) -> Optional[object]:
         return None
 
     if GROUP_CALL_CLIENT is None:
+        session_string = os.getenv("TELEGRAM_SESSION_STRING")
+        if not session_string:
+            raise RuntimeError("TELEGRAM_SESSION_STRING environment variable is missing! You must generate a Pyrogram session string locally and add it to Render so the bot can join voice chats.")
+            
         GROUP_CALL_CLIENT = PyrogramClient(
             SESSION_NAME,
             api_id=API_ID,
             api_hash=API_HASH,
+            session_string=session_string,
             workdir=tempfile.gettempdir(),
         )
         GROUP_CALL_INSTANCE = PyTgCalls(GROUP_CALL_CLIENT)
