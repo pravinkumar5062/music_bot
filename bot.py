@@ -1,4 +1,5 @@
 import asyncio
+import fcntl
 import os
 import tempfile
 from dataclasses import dataclass
@@ -332,6 +333,16 @@ def main() -> None:
             "Set TELEGRAM_BOT_TOKEN (or BOT_TOKEN/TOKEN) in your environment or .env file."
         )
 
+    lock_fd = None
+    try:
+        lock_path = os.path.join(tempfile.gettempdir(), "music_bot_single_instance.lock")
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        raise RuntimeError("Another bot instance is already running on this container.") from exc
+
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -342,7 +353,12 @@ def main() -> None:
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("help", help_cmd))
 
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    finally:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
 
 
 if __name__ == "__main__":
