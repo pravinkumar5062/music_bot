@@ -896,7 +896,10 @@ def main() -> None:
         connect_timeout=30.0,
         pool_timeout=30.0
     )
-    application = Application.builder().token(TOKEN).request(request).build()
+    
+    # Route all Telegram API traffic through the Cloudflare proxy to bypass Hugging Face firewalls!
+    proxy_url = "https://telegram-proxy.protyson67.workers.dev/bot"
+    application = Application.builder().token(TOKEN).base_url(proxy_url).request(request).build()
     global BOT_INSTANCE
     BOT_INSTANCE = application.bot
 
