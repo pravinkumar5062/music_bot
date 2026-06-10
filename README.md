@@ -1,3 +1,12 @@
+---
+title: Music Bot
+emoji: 🎵
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
 # music_bot
 
 A simple Telegram music bot that can:
@@ -24,4 +33,4 @@ A simple Telegram music bot that can:
 ## Notes
 - The bot now tries to play tracks in a Telegram voice chat when the group-call stack is available.
 - If the voice-chat stack is not installed or cannot join the chat, it falls back to sending the audio file back to the chat.
-- On Render, install the updated dependencies from requirements.txt and set TELEGRAM_API_ID, TELEGRAM_API_HASH, and TELEGRAM_BOT_TOKEN in the environment.
+- On Render/Hugging Face, set your tokens in the environment.
