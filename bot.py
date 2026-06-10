@@ -887,7 +887,16 @@ def main() -> None:
                 os.close(lock_fd)
             raise RuntimeError("Another bot instance is already running on this container.") from exc
 
-    application = Application.builder().token(TOKEN).build()
+    from telegram.request import HTTPXRequest
+    # Hugging Face Free Tier can be slow to allocate network on boot, so we dramatically increase timeouts
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        connect_timeout=30.0,
+        pool_timeout=30.0
+    )
+    application = Application.builder().token(TOKEN).request(request).build()
     global BOT_INSTANCE
     BOT_INSTANCE = application.bot
 
