@@ -174,7 +174,6 @@ def build_ydl_opts(*, download: bool = False) -> dict:
         "skip_download": not download,
         "socket_timeout": 60,
         "extractor_retries": 3,
-        "extractor_args": {"youtube": {"player_client": ["ios", "web"]}},
         "js_runtimes": {"node": {}},
     }
     
