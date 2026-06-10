@@ -1,12 +1,3 @@
----
-title: Music Bot
-emoji: 🎵
-colorFrom: blue
-colorTo: purple
-sdk: docker
-pinned: false
----
-
 # music_bot
 
 A simple Telegram music bot that can:

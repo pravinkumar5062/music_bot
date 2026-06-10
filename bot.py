@@ -922,24 +922,6 @@ def main() -> None:
                 drop_pending_updates=True,
             )
         else:
-            # Hugging Face Spaces requires a service listening on the PORT even if we are just polling!
-            from http.server import HTTPServer, BaseHTTPRequestHandler
-            import threading
-            
-            class DummyHandler(BaseHTTPRequestHandler):
-                def do_GET(self):
-                    self.send_response(200)
-                    self.end_headers()
-                    self.wfile.write(b"Bot is running on Hugging Face!")
-                    
-            def run_dummy_server():
-                try:
-                    server = HTTPServer(("0.0.0.0", port), DummyHandler)
-                    server.serve_forever()
-                except Exception as e:
-                    logging.error(f"Dummy server failed: {e}")
-                    
-            threading.Thread(target=run_dummy_server, daemon=True).start()
             application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
     finally:
         if lock_fd is not None and fcntl is not None:
