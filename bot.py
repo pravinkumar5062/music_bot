@@ -52,7 +52,7 @@ if not hasattr(pyrogram.errors, "GroupcallForbidden"):
     pyrogram.errors.GroupcallForbidden = type("GroupcallForbidden", (Exception,), {})
 
 from pytgcalls import PyTgCalls
-from pytgcalls.types import MediaStream
+from pytgcalls.types import MediaStream, AudioQuality
 
 try:
     from yt_dlp.networking.impersonate import ImpersonateTarget
@@ -346,7 +346,8 @@ async def _play_in_group(chat_id: int, song: Song) -> bool:
             chat_id,
             MediaStream(
                 song.file_path, 
-                video_flags=MediaStream.Flags.IGNORE
+                video_flags=MediaStream.Flags.IGNORE,
+                audio_parameters=AudioQuality.HIGH
             ),
         )
         
